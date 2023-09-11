@@ -114,7 +114,7 @@
 		<param name="tilt_position_D_gain"	value="2.0"/>	
 
     	<node name="FAC_MAV_node"  pkg="FAC_MAV" type="FAC_MAV_ctrler"  output="screen"/>
-
+	<node name="external_wrench_estimator_node" pkg="external_wrench_nmhe" type="external_wrench_estimator" output="screen"/>
 	<node pkg="data_logging" name="data_logging_node" type="data_logging"/>
 	
     

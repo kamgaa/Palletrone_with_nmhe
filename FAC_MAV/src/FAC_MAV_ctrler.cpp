@@ -50,7 +50,11 @@
 #include "FAC_MAV/PosCtrlService.h" //ASDF
 #include "FAC_MAV/HoverService.h" //ASDF
 #include "FAC_MAV/FAC_HoverService.h" //ASDF
-
+//-----For CasADi-----//
+#include <casadi/casadi.hpp>
+#include "DoubleLinkedList.h"
+#include <algorithm>
+//--------------------//
 #include "nav_msgs/Odometry.h"
 
 double freq=200;//controller loop frequency
@@ -63,7 +67,7 @@ int16_t loop_time;
 std_msgs::Int16MultiArray PWMs_cmd;
 std_msgs::Int32MultiArray PWMs_val;
 std_msgs::Float32MultiArray Force;
-
+std_msgs::Float32 mass_topic;
 sensor_msgs::JointState rac_servo_value;
 sensor_msgs::Imu imu;
 geometry_msgs::Quaternion imu_quaternion;
@@ -97,6 +101,11 @@ geometry_msgs::Vector3 external_force;
 geometry_msgs::Vector3 desired_position_change;
 geometry_msgs::Vector3 reference_position;
 geometry_msgs::Vector3 force_dhat;
+geometry_msgs::Vector3 non_bias_external_force;
+geometry_msgs::Vector3 external_torque;
+geometry_msgs::Vector3 adaptive_external_force;
+geometry_msgs::Vector3 adaptive_external_torque;
+
 
 bool servo_sw=false;
 double theta1_command, theta2_command, theta3_command, theta4_command;
@@ -198,6 +207,11 @@ double M=0.5;
 double D=20.0;
 double K=0;
 double external_force_deadzone=3.5; //N
+// MHE values
+double F_ex_bias_integrator=0.0;
+double F_ey_bias_integrator=0.0;
+double F_ex_bias=0.0;
+double F_ey_bias=0.0;
 
 //Force estimation lpf
 double Fe_x_x_dot = 0;
@@ -213,7 +227,7 @@ double Fe_cutoff_freq = 1.0;
 
 static double r_arm = 0.3025;// m // diagonal length between thruster x2
 static double l_servo = 0.035;
-static double mass = 5.4;//2.9;//3.8; 2.365;//(Kg)
+static double mass = 5.4;//	!!!!PLEASE CHECK the position_dob_m!!!!
 static double r2=sqrt(2);
 
 
@@ -401,6 +415,10 @@ void posCallback(const geometry_msgs::Vector3& msg);
 void rotCallback(const geometry_msgs::Quaternion& msg);
 void filterCallback(const sensor_msgs::Imu& msg);
 void t265OdomCallback(const nav_msgs::Odometry::ConstPtr& msg);
+void external_force_Callback(const geometry_msgs::Vector3& msg);
+void external_torque_Callback(const geometry_msgs::Vector3& msg);
+void adaptive_external_force_Callback(const geometry_msgs::Vector3& msg);
+void adaptive_external_torque_Callback(const geometry_msgs::Vector3& msg);
 void setCM();
 void setSA();
 void publisherSet();
@@ -416,6 +434,24 @@ void sine_wave_vibration();
 void get_Rotation_matrix();
 void external_force_estimation();
 void admittance_controller();
+
+double position_dob_fc=0.1;
+double position_dob_m=5.4;
+double dhat_Fx = 0;
+double dhat_Fy = 0; 
+double dhat_Fz = 0; 
+double X_tilde_r = 0;
+double Y_tilde_r = 0;
+double Z_tilde_r = 0;
+void position_dob();
+
+//Mass update-----------------------------
+void mass_update();
+double updated_mass=0.0;
+double mass_x_dot=0.0;
+double mass_x=0.0;
+double mass_y=0.0;
+double mass_lpf_fc=0.1;
 //-------------------------------------------------------
 
 //Publisher Group--------------------------------------
@@ -445,7 +481,9 @@ ros::Publisher linear_acceleration;
 ros::Publisher External_force_data;
 ros::Publisher reference_desired_pos_error;
 ros::Publisher reference_pos;
-ros::Publusher mass_pub;
+ros::Publisher force_dhat_pub;
+ros::Publisher mass_pub;
+ros::Publisher non_bias_external_force_pub;
 //ros::Publisher tau_yaw_thrust;
 //----------------------------------------------------
 
@@ -544,7 +582,7 @@ double x_az = 0;
 double accel_cutoff_freq = 1.0;
 //-----------------------------------------------------
 //Position DOB-----------------------------------------
-double pos_dob_cutoff_freq=1.0;
+//double pos_dob_cutoff_freq=1.0;
 double X_tilde_ddot_d=0.0;
 double Y_tilde_ddot_d=0.0;
 double Z_tilde_ddot_d=0.0;
@@ -575,21 +613,6 @@ Eigen::MatrixXd Q_Z_x(3,1);
 Eigen::MatrixXd Q_Z_x_dot(3,1);
 Eigen::MatrixXd Q_Z_y(1,1);
 
-double dhat_Fx = 0;
-double dhat_Fy = 0; 
-double dhat_Fz = 0; 
-double X_tilde_r = 0;
-double Y_tilde_r = 0;
-double Z_tilde_r = 0;
-void position_dob();
-
-//Mass update-----------------------------
-void mass_update();
-double updated_mass=0.0;
-double mass_x_dot=0.0;
-double mass_x=0.0;
-double mass_y=0.0;
-double mass_lpf_fc=0.1;
 //-----------------------------------------------------
 int main(int argc, char **argv){
 	
@@ -711,11 +734,12 @@ int main(int argc, char **argv){
 	sine_wave_data = nh.advertise<geometry_msgs::Vector3>("sine_wave",100);
 	disturbance = nh.advertise<geometry_msgs::Vector3>("dhat",100);
 	linear_acceleration = nh.advertise<geometry_msgs::Vector3>("imu_lin_acl",100);
-	External_force_data = nh.advertise<geometry_msgs::Vector3>("external_force",100);
+	//External_force_data = nh.advertise<geometry_msgs::Vector3>("external_force",100);
 	reference_desired_pos_error = nh.advertise<geometry_msgs::Vector3>("pos_e",100);
 	reference_pos = nh.advertise<geometry_msgs::Vector3>("pos_r",100);
-	mass_pub = nh.advertise<geometry_msgs::Vector3>("mass",1);
-	force_dhat_pub = nh.advertise<geometry_msgs::Vector3>("force_dhat",1);
+	mass_pub = nh.advertise<std_msgs::Float32>("mass",1);
+	non_bias_external_force_pub = nh.advertise<geometry_msgs::Vector3>("non_bias_external_force",1);
+	force_dhat_pub = nh.advertise<geometry_msgs::Vector3>("force_dhat",1);	
 	//tau_yaw_thrust = nh.advertise<geometry_msgs::Vector3>("pos_r",100);
 
     	ros::Subscriber dynamixel_state = nh.subscribe("joint_states",100,jointstateCallback,ros::TransportHints().tcpNoDelay());
@@ -725,7 +749,10 @@ int main(int argc, char **argv){
 	ros::Subscriber t265_pos=nh.subscribe("/t265_pos",100,posCallback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber t265_rot=nh.subscribe("/t265_rot",100,rotCallback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber t265_odom=nh.subscribe("/rs_t265/odom/sample",100,t265OdomCallback,ros::TransportHints().tcpNoDelay());
-	
+	ros::Subscriber external_force_sub=nh.subscribe("/external_force",1,external_force_Callback,ros::TransportHints().tcpNoDelay());
+	ros::Subscriber external_torque_sub=nh.subscribe("/external_torque",1,external_torque_Callback,ros::TransportHints().tcpNoDelay());
+	ros::Subscriber adaptive_external_force_sub=nh.subscribe("/adaptive_external_force",1,adaptive_external_force_Callback,ros::TransportHints().tcpNoDelay());
+	ros::Subscriber adaptive_external_torque_sub=nh.subscribe("/adaptvie_external_torque",1,adaptive_external_torque_Callback,ros::TransportHints().tcpNoDelay());	
 	
 	
 	
@@ -832,7 +859,9 @@ void publisherSet(){
 	reference_pos.publish(reference_position);
 	prev_angular_Vel = imu_ang_vel;
 	prev_lin_vel = lin_vel;
-	mass_pub.publish(mass_topic);	
+	mass_pub.publish(mass_topic);
+	non_bias_external_force_pub.publish(non_bias_external_force);
+
 }
 
 void setCM(){
@@ -1301,6 +1330,29 @@ void t265OdomCallback(const nav_msgs::Odometry::ConstPtr& msg){
 	//ROS_INFO("Linear_velocity - [x: %f  y: %f  z:%f]",cam_v(0),cam_v(1),cam_v(2));
 	//ROS_INFO("Angular_velocity - [x: %f  y: %f  z:%f]",w(0),w(1),w(2));
 }
+void external_force_Callback(const geometry_msgs::Vector3& msg){
+	external_force=msg;
+
+	non_bias_external_force.x=external_force.x-F_ex_bias;
+	non_bias_external_force.y=external_force.y-F_ey_bias;
+	non_bias_external_force.z=external_force.z;
+}
+
+void external_torque_Callback(const geometry_msgs::Vector3& msg){
+	external_torque=msg;
+}
+
+void adaptive_external_force_Callback(const geometry_msgs::Vector3& msg){
+	adaptive_external_force=msg;
+
+//	non_bias_external_force.x=external_force.x-f_ex_bias;
+//	non_bias_external_force.y=external_force.y-f_ey_bias;
+//	non_bias_external_force.z=external_force.z;
+}
+
+void adaptive_external_torque_Callback(const geometry_msgs::Vector3& msg){
+	adaptive_external_torque=msg;
+}
 
 int32_t pwmMapping(double pwm){
 	return (int32_t)(65535.*pwm/(1./pwm_freq*1000000.));
@@ -1559,7 +1611,8 @@ void get_Rotation_matrix(){
                   0, cos(imu_rpy.x), -sin(imu_rpy.x),
                   0, sin(imu_rpy.x),  cos(imu_rpy.x);		  
 }
-void external_force_estimation(){
+/*void external_force_estimation(){ 
+   //----Estimate the external force in external_wrench_nmhe_node 2023.09.09----
 	get_Rotation_matrix();
 		
 	x_ax_dot=-accel_cutoff_freq*x_ax+imu_lin_acc.x;
@@ -1600,7 +1653,7 @@ void external_force_estimation(){
 	if(fabs(external_force.x)<external_force_deadzone) external_force.x=0;
 	if(fabs(external_force.y)<external_force_deadzone) external_force.y=0;
 	if(fabs(external_force.z)<external_force_deadzone) external_force.z=0;
-}
+}*/
 
 void admittance_controller(){
 	
@@ -1675,6 +1728,26 @@ void position_dob(){
 	reference_position.z=Z_tilde_r;*/
 }
 
+void external_force_bias_eliminator(){
+	if(!measure_external_force_bias){
+		if(eliminator_iter_num==0){
+			ROS_INFO("Measuring external force bias...");
+		}
+		
+		F_ex_bias_integrator+=external_force.x;
+		F_ey_bias_integrator+=external_force.y;
+		
+		eliminator_iter_num++;
+	}
+	if(eliminator_iter_num==eliminator_iter_max){
+		F_ex_bias = F_ex_bias_integrator/(double)eliminator_iter_max;
+		F_ey_bias = F_ey_bias_integrator/(double)eliminator_iter_max;
+		eliminator_iter_num++;
+		measure_external_force_bias=true;
+		ROS_INFO("Measuring complete!!!");
+	}		
+	
+}
 
 void mass_update()
 {
