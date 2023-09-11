@@ -107,6 +107,7 @@ geometry_msgs::Vector3 adaptive_external_force;
 geometry_msgs::Vector3 adaptive_external_torque;
 
 
+
 bool servo_sw=false;
 double theta1_command, theta2_command, theta3_command, theta4_command;
 bool start_flag=false;
@@ -207,11 +208,6 @@ double M=0.5;
 double D=20.0;
 double K=0;
 double external_force_deadzone=3.5; //N
-// MHE values
-double F_ex_bias_integrator=0.0;
-double F_ey_bias_integrator=0.0;
-double F_ex_bias=0.0;
-double F_ey_bias=0.0;
 
 //Force estimation lpf
 double Fe_x_x_dot = 0;
@@ -396,6 +392,16 @@ double y_dot_y2=0;
 double y_dot_y3=0;
 
 double tautilde_y_d=0;
+//---External Force Bias Eliminator 
+void external_force_bias_eliminator();
+int eliminator_iter_num=0;
+//int eliminator_integ_num=5000;
+int eliminator_iter_max=5000;
+double F_ex_bias_integrator=0.0;
+double F_ey_bias_integrator=0.0;
+double F_ex_bias=0.0;
+double F_ey_bias=0.0;
+bool measure_external_force_bias=false;
 //--------------------------------------------------------
 //Function------------------------------------------------
 template <class T>
@@ -478,7 +484,7 @@ ros::Publisher angular_Acceleration;
 ros::Publisher sine_wave_data;
 ros::Publisher disturbance;
 ros::Publisher linear_acceleration;
-ros::Publisher External_force_data;
+//ros::Publisher External_force_data;
 ros::Publisher reference_desired_pos_error;
 ros::Publisher reference_pos;
 ros::Publisher force_dhat_pub;
@@ -854,7 +860,7 @@ void publisherSet(){
 	sine_wave_data.publish(sine_wave); //not use
 	disturbance.publish(dhat); // not use
 	linear_acceleration.publish(lin_acl);
-	External_force_data.publish(external_force);
+	//External_force_data.publish(external_force);
 	reference_desired_pos_error.publish(desired_position_change);
 	reference_pos.publish(reference_position);
 	prev_angular_Vel = imu_ang_vel;
@@ -1727,6 +1733,7 @@ void position_dob(){
 	reference_position.y=Y_tilde_r;
 	reference_position.z=Z_tilde_r;*/
 }
+
 
 void external_force_bias_eliminator(){
 	if(!measure_external_force_bias){
