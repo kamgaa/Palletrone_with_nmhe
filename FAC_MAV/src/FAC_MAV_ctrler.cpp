@@ -444,9 +444,9 @@ void admittance_controller();
 
 double position_dob_fc=0.1;
 double position_dob_m=5.4;
-double dhat_Fx = 0;
-double dhat_Fy = 0; 
-double dhat_Fz = 0; 
+double dhat_X_ddot = 0;
+double dhat_Y_ddot = 0; 
+double dhat_Z_ddot = 0; 
 double X_tilde_r = 0;
 double Y_tilde_r = 0;
 double Z_tilde_r = 0;
@@ -981,10 +981,14 @@ void rpyT_ctrl() {
 		if(fabs(Y_ddot_d) > XYZ_ddot_limit) Y_ddot_d = (Y_ddot_d/fabs(Y_ddot_d))*XYZ_ddot_limit;
 		
 		if(tilt_mode){
+			
+			X_tilde_ddot_d=X_ddot_d-external_force.x/mass;
+			Y_tilde_ddot_d=Y_ddot_d-external_force.y/mass;
+			Z_tilde_ddot_d=Z_ddot_d-external_force.z/mass;
 			r_d = 0.0;
 			p_d = 0.0;
-			F_xd = mass*(X_ddot_d*cos(imu_rpy.z)*cos(imu_rpy.y)+Y_ddot_d*sin(imu_rpy.z)*cos(imu_rpy.y)-(Z_ddot_d)*sin(imu_rpy.y));
-			F_yd = mass*(-X_ddot_d*(cos(imu_rpy.x)*sin(imu_rpy.z)-cos(imu_rpy.z)*sin(imu_rpy.x)*sin(imu_rpy.y))+Y_ddot_d*(cos(imu_rpy.x)*cos(imu_rpy.z)+sin(imu_rpy.x)*sin(imu_rpy.y)*sin(imu_rpy.z))+(Z_ddot_d)*cos(imu_rpy.y)*sin(imu_rpy.x));
+			F_xd = mass*(X_tilde_ddot_d*cos(imu_rpy.z)*cos(imu_rpy.y)+Y_tilde_ddot_d*sin(imu_rpy.z)*cos(imu_rpy.y)-(Z_tilde_ddot_d)*sin(imu_rpy.y));
+			F_yd = mass*(-X_tilde_ddot_d*(cos(imu_rpy.x)*sin(imu_rpy.z)-cos(imu_rpy.z)*sin(imu_rpy.x)*sin(imu_rpy.y))+Y_tilde_ddot_d*(cos(imu_rpy.x)*cos(imu_rpy.z)+sin(imu_rpy.x)*sin(imu_rpy.y)*sin(imu_rpy.z))+(Z_tilde_ddot_d)*cos(imu_rpy.y)*sin(imu_rpy.x));
 
 		if(fabs(F_xd) > F_xd_limit) F_xd = (F_xd/fabs(F_xd))*F_xd_limit;
 		if(fabs(F_yd) > F_yd_limit) F_yd = (F_yd/fabs(F_yd))*F_yd_limit;
@@ -1703,7 +1707,7 @@ void position_dob(){
 	Q_X_x+=Q_X_x_dot*delta_t.count();
 	Q_X_y=Q_C*Q_X_x;
 
-	dhat_Fx=MinvQ_X_y(0)-Q_X_y(0);
+	dhat_X_ddot=MinvQ_X_y(0)-Q_X_y(0);
 
 
 	MinvQ_Y_x_dot=MinvQ_A*MinvQ_Y_x+MinvQ_B*pos.y;
@@ -1714,7 +1718,7 @@ void position_dob(){
 	Q_Y_x+=Q_Y_x_dot*delta_t.count();
 	Q_Y_y=Q_C*Q_Y_x;
 
-	dhat_Fy=MinvQ_Y_y(0)-Q_Y_y(0);
+	dhat_Y_ddot=MinvQ_Y_y(0)-Q_Y_y(0);
 
 	MinvQ_Z_x_dot=MinvQ_A*MinvQ_Z_x+MinvQ_B*pos.z;
 	MinvQ_Z_x+=MinvQ_Z_x_dot*delta_t.count();
@@ -1724,19 +1728,15 @@ void position_dob(){
 	Q_Z_x+=Q_Z_x_dot*delta_t.count();
 	Q_Z_y=Q_C*Q_Z_x;
 
-	dhat_Fz=MinvQ_Z_y(0)-Q_Z_y(0);
+	dhat_Z_ddot=MinvQ_Z_y(0)-Q_Z_y(0);
 	
 /*	X_tilde_r=X_r-dhat_X;
 	Y_tilde_r=Y_r-dhat_Y;
 	Z_tilde_r=Z_r-dhat_Z;*/
-	
-	X_tilde_ddot_d=X_ddot_d-external_force.x/mass;
-	Y_tilde_ddot_d=Y_ddot_d-external_force.y/mass;
-	Z_tilde_ddot_d=Z_ddot_d-external_force.z/mass;
 
-	force_dhat.x=dhat_Fx;
-	force_dhat.y=dhat_Fy;
-	force_dhat.z=dhat_Fz;
+	force_dhat.x=dhat_X_ddot;
+	force_dhat.y=dhat_Y_ddot;
+	force_dhat.z=dhat_Z_ddot;
 
 	
 	/*reference_position.x=X_tilde_r;
