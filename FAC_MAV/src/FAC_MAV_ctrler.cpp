@@ -122,6 +122,7 @@ bool altitude_mode = false;
 bool tilt_mode = false;
 bool ESC_control = false;
 bool admittance_mode = false;
+bool DOB_mode = true;
 //Thruster_cmd
 double F1 = 0;//desired propeller 1 force
 double F2 = 0;//desired propeller 2 force
@@ -1055,6 +1056,12 @@ void rpyT_ctrl() {
 		F_zd=T_d;
 		//ROS_INFO("Manual Thrust!!");
 	}
+
+	if(DOB_mode){
+		//disturbance_Observer();
+		position_dob();
+		ROS_INFO("DOB mode");	
+	}
 //	if(F_zd > -0.5*mass*g) F_zd = -0.5*mass*g;
 //	if(F_zd <= -1.5*mass*g) F_zd = -1.5*mass*g; //1.5
 	
@@ -1241,7 +1248,10 @@ void sbusCallback(const std_msgs::Int16MultiArray::ConstPtr& array){
 	}
 	
 	if(Sbus[4]<1500) kill_mode=true;
-	else kill_mode=false;
+	else {
+		kill_mode=false;
+		tilt_mode=true;
+	}
 	
 	if(Sbus[5]>1500) altitude_mode=true;
 	else altitude_mode=false;
@@ -1262,8 +1272,8 @@ void sbusCallback(const std_msgs::Int16MultiArray::ConstPtr& array){
 		position_mode=true;
 	}
 
-	if(Sbus[7]>1500) tilt_mode=true;
-	else tilt_mode=false;
+	if(Sbus[7]>1500) DOB_mode=true;
+	else DOB_mode=false;
 
 	if(Sbus[9]>1500) admittance_mode=true;
 	else admittance_mode=true;
