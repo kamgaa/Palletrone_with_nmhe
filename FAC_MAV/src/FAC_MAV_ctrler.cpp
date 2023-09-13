@@ -913,13 +913,13 @@ void rpyT_ctrl() {
 			
 		if(Z_d <-0.7) Z_d=-0.7;
 		if(Z_d > 0) Z_d=0;
-		//Z_d = -altitude_limit*(((double)Sbus[2]-(double)1500)/(double)500)-altitude_limit;
+	//Z_d = -altitude_limit*(((double)Sbus[2]-(double)1500)/(double)500)-altitude_limit;
 	}
 	else{
 		T_d = -T_limit*(((double)Sbus[2]-(double)1500)/(double)500)-T_limit;
 	}
 	//ROS_INFO("%lf",T_d);
-
+	
 	double e_r = 0;
 	double e_p = 0;
 	double e_y = 0;
@@ -930,6 +930,20 @@ void rpyT_ctrl() {
 	double e_Y_dot = 0;
 		
 	//ROS_INFO("%lf",time_count);
+
+	e_Z = Z_d - pos.z;
+	e_Z_i += e_Z * delta_t.count();	
+	if (fabs(e_Z_i) > z_integ_limit) e_Z_i = (e_Z_i / fabs(e_Z_i)) * z_integ_limit;
+
+
+	if(altitude_mode){
+		Z_ddot_d = Pz * e_Z + Iz * e_Z_i - Dz * lin_vel.z;
+	}
+	else{
+		e_Z_i = 0;
+		e_Z_dot_i = 0;
+			//ROS_INFO("Manual Thrust!!");
+	}
 
 	if(tilt_mode){
 	//	external_force_estimation();
@@ -982,9 +996,9 @@ void rpyT_ctrl() {
 		
 		if(tilt_mode){
 			
-			X_tilde_ddot_d=X_ddot_d-external_force.x/mass;
-			Y_tilde_ddot_d=Y_ddot_d-external_force.y/mass;
-			Z_tilde_ddot_d=Z_ddot_d-external_force.z/mass;
+			X_tilde_ddot_d=X_ddot_d-dhat_X_ddot;
+			Y_tilde_ddot_d=Y_ddot_d-dhat_Y_ddot;
+			Z_tilde_ddot_d=Z_ddot_d-dhat_Z_ddot;
 			r_d = 0.0;
 			p_d = 0.0;
 			F_xd = mass*(X_tilde_ddot_d*cos(imu_rpy.z)*cos(imu_rpy.y)+Y_tilde_ddot_d*sin(imu_rpy.z)*cos(imu_rpy.y)-(Z_tilde_ddot_d)*sin(imu_rpy.y));
@@ -1032,14 +1046,11 @@ void rpyT_ctrl() {
 	e_p = p_d - imu_rpy.y;
 	e_y = y_d - imu_rpy.z;
 
-	e_Z = Z_d - pos.z;
 	
 	e_r_i += e_r * delta_t.count();
 	if (fabs(e_r_i) > integ_limit)	e_r_i = (e_r_i / fabs(e_r_i)) * integ_limit;
 	e_p_i += e_p * delta_t.count();
 	if (fabs(e_p_i) > integ_limit)	e_p_i = (e_p_i / fabs(e_p_i)) * integ_limit;
-	e_Z_i += e_Z * delta_t.count();	
-	if (fabs(e_Z_i) > z_integ_limit) e_Z_i = (e_Z_i / fabs(e_Z_i)) * z_integ_limit;
 
 	tau_r_d = Par * e_r + Iar * e_r_i + Dar * (-imu_ang_vel.x);//- (double)0.48; //Pa -> Par
 	tau_p_d = Par * e_p + Iar * e_p_i + Dar * (-imu_ang_vel.y);//+ (double)0.18; //Pa -> Par 
@@ -1048,15 +1059,12 @@ void rpyT_ctrl() {
 	if(fabs(tau_y_d) > tau_y_limit) tau_y_d = tau_y_d/fabs(tau_y_d)*tau_y_limit;
 	
 	if(altitude_mode){
-		Z_ddot_d = Pz * e_Z + Iz * e_Z_i - Dz * lin_vel.z;
 		desired_lin_vel.z = Z_ddot_d; // But this is desired acceleration
-		if(!attitude_mode) F_zd = mass*(X_ddot_d*(sin(imu_rpy.x)*sin(imu_rpy.z)+cos(imu_rpy.x)*cos(imu_rpy.z)*sin(imu_rpy.y))-Y_ddot_d*(cos(imu_rpy.z)*sin(imu_rpy.x)-cos(imu_rpy.x)*sin(imu_rpy.y)*sin(imu_rpy.z))+(Z_ddot_d)*cos(imu_rpy.x)*cos(imu_rpy.y));
+		if(!attitude_mode) F_zd = mass*(X_tilde_ddot_d*(sin(imu_rpy.x)*sin(imu_rpy.z)+cos(imu_rpy.x)*cos(imu_rpy.z)*sin(imu_rpy.y))-Y_tilde_ddot_d*(cos(imu_rpy.z)*sin(imu_rpy.x)-cos(imu_rpy.x)*sin(imu_rpy.y)*sin(imu_rpy.z))+(Z_tilde_ddot_d)*cos(imu_rpy.x)*cos(imu_rpy.y));
 		else F_zd = mass*(Z_ddot_d);
 		//ROS_INFO("Altitude");
 	}
 	else{
-		e_Z_i = 0;
-		e_Z_dot_i = 0;
 		F_zd=T_d;
 		//ROS_INFO("Manual Thrust!!");
 	}
