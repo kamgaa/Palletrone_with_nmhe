@@ -29,7 +29,7 @@ int n_states=18; //pos vel att omega ext_F ext_T
 int n_controls=6; // Force Torque
 int n_outputs=15; // pos vel att omega imu_acl
 double Jxx=0.01; double Jyy=0.01; double Jzz=0.1;
-double mass=5.4; double g=9.81; double PI=3.141592;
+double mass=7.4; double g=9.81; double PI=3.141592;
 
 DM MHE_control_inputs = DM::zeros(n_controls,N_MHE+1);
 DM MHE_measurements = DM::zeros(n_outputs,N_MHE+1);
@@ -481,7 +481,7 @@ void sbus_Callback(const std_msgs::Int16MultiArray::ConstPtr& array){
 
 void force_DOB_result_Callback(const geometry_msgs::Vector3& msg){
 	force_dhat=msg;
-	MHE_force_dhat(0)=force_dhat.x;
-	MHE_force_dhat(1)=force_dhat.y;
-	MHE_force_dhat(2)=force_dhat.z;
+	MHE_force_dhat(0)=0.0;//force_dhat.x;
+	MHE_force_dhat(1)=0.0;//force_dhat.y;
+	MHE_force_dhat(2)=0.0;//force_dhat.z;
 }

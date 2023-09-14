@@ -224,7 +224,7 @@ double Fe_cutoff_freq = 1.0;
 
 static double r_arm = 0.3025;// m // diagonal length between thruster x2
 static double l_servo = 0.035;
-static double mass = 5.4;//	!!!!PLEASE CHECK the position_dob_m!!!!
+static double mass = 7.4;//	!!!!PLEASE CHECK the position_dob_m!!!!
 static double r2=sqrt(2);
 
 
@@ -443,7 +443,7 @@ void external_force_estimation();
 void admittance_controller();
 
 double position_dob_fc=0.1;
-double position_dob_m=5.4;
+double position_dob_m=7.4;
 double dhat_X_ddot = 0;
 double dhat_Y_ddot = 0; 
 double dhat_Z_ddot = 0; 
@@ -945,20 +945,9 @@ void rpyT_ctrl() {
 			//ROS_INFO("Manual Thrust!!");
 	}
 
-	if(tilt_mode){
-	//	external_force_estimation();
-	//	admittance_controller();
-	//	position_dob();
-		mass_update();
-	}
-	else{
-		X_e_x1=0;
-		X_e_x2=0;
-		Y_e_x1=0;
-		Y_e_x2=0;
-	}
 	if(position_mode || velocity_mode){
 		if(position_mode){
+			
 			X_d = X_d_base - XY_limit*(((double)Sbus[1]-(double)1500)/(double)500);
 			Y_d = Y_d_base + XY_limit*(((double)Sbus[3]-(double)1500)/(double)500);
 		
@@ -1074,8 +1063,8 @@ void rpyT_ctrl() {
 		position_dob();
 		ROS_INFO("DOB mode");	
 	}
-//	if(F_zd > -0.5*mass*g) F_zd = -0.5*mass*g;
-//	if(F_zd <= -1.5*mass*g) F_zd = -1.5*mass*g; //1.5
+	if(F_zd > -0.5*mass*g) F_zd = -0.5*mass*g;
+	if(F_zd <= -1.5*mass*g) F_zd = -1.5*mass*g; //1.5
 	
 
 	//DOB-----------------------------------------------------
@@ -1259,7 +1248,10 @@ void sbusCallback(const std_msgs::Int16MultiArray::ConstPtr& array){
 		Sbus[i]=map<int16_t>(array->data[i], 352, 1696, 1000, 2000);
 	}
 	
-	if(Sbus[4]<1500) kill_mode=true;
+	if(Sbus[4]<1500) {
+		kill_mode=true;
+		tilt_mode=false;
+	}
 	else {
 		kill_mode=false;
 		tilt_mode=true;
@@ -1684,25 +1676,29 @@ void get_Rotation_matrix(){
 }*/
 
 void admittance_controller(){
+	if(fabs(adaptive_external_force.x)<external_force_deadzone) adaptive_external_force.x=0;
+	if(fabs(adaptive_external_force.y)<external_force_deadzone) adaptive_external_force.y=0;	
+	if(fabs(adaptive_external_force.z)<external_force_deadzone) adaptive_external_force.z=0;	
 	
-		X_e_x1_dot=-D/M*X_e_x1-K/M*X_e_x2+external_force.x;
-		X_e_x2_dot=X_e_x1;
-		X_e_x1+=X_e_x1_dot*delta_t.count();
-		X_e_x2+=X_e_x2_dot*delta_t.count();
-		X_e=-1.0/M*X_e_x2;
+	X_e_x1_dot=-D/M*X_e_x1-K/M*X_e_x2+adaptive_external_force.x;
+	X_e_x2_dot=X_e_x1;
+	X_e_x1+=X_e_x1_dot*delta_t.count();
+	X_e_x2+=X_e_x2_dot*delta_t.count();
+	X_e=-1.0/M*X_e_x2;
 	
-		Y_e_x1_dot=-D/M*Y_e_x1-K/M*X_e_x2+external_force.y;
-		Y_e_x2_dot=Y_e_x1;
-		Y_e_x1+=Y_e_x1_dot*delta_t.count();
-		Y_e_x2+=Y_e_x2_dot*delta_t.count();
-		Y_e=-1.0/M*Y_e_x2;
+	Y_e_x1_dot=-D/M*Y_e_x1-K/M*X_e_x2+adaptive_external_force.y;
+	Y_e_x2_dot=Y_e_x1;
+	Y_e_x1+=Y_e_x1_dot*delta_t.count();
+	Y_e_x2+=Y_e_x2_dot*delta_t.count();
+	Y_e=-1.0/M*Y_e_x2;
 	
-	X_r=X_d-X_e;
-	Y_r=Y_d-Y_e;
+	X_r=X_d;
+	Y_r=Y_d;
 	Z_r=Z_d;
 
-	desired_position_change.x=X_r;
-	desired_position_change.y=Y_r;
+	reference_position.x=X_r;
+	reference_position.y=Y_r;
+	reference_position.z=Z_d;	
 	
 }
 
@@ -1742,9 +1738,9 @@ void position_dob(){
 	Y_tilde_r=Y_r-dhat_Y;
 	Z_tilde_r=Z_r-dhat_Z;*/
 
-	force_dhat.x=dhat_X_ddot;
-	force_dhat.y=dhat_Y_ddot;
-	force_dhat.z=dhat_Z_ddot;
+	force_dhat.x=dhat_X_ddot*mass;
+	force_dhat.y=dhat_Y_ddot*mass;
+	force_dhat.z=dhat_Z_ddot*mass;
 
 	
 	/*reference_position.x=X_tilde_r;
