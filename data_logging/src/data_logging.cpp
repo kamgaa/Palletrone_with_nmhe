@@ -228,7 +228,7 @@ void publisherSet()
 	data_log.data[69]=attitude_dob_disturbance.z;
 	data_log.data[70]=external_force.x;
 	data_log.data[71]=external_force.y;
-	data_log.data[71]=external_force.z;
+	data_log.data[72]=external_force.z;
 	data_log.data[73]=external_torque.x;
 	data_log.data[74]=external_torque.y;
 	data_log.data[75]=external_torque.z;
@@ -238,7 +238,7 @@ void publisherSet()
 	data_log.data[79]=reference_position.z;
 	data_log.data[80]=calculated_force.x;
 	data_log.data[81]=calculated_force.y;
-	data_log.data[81]=calculated_force.z;
+	data_log.data[82]=calculated_force.z;
 	data_log.data[83]=non_bias_external_force.x;	
 	data_log.data[84]=non_bias_external_force.y;	
 	data_log.data[85]=non_bias_external_force.z;	

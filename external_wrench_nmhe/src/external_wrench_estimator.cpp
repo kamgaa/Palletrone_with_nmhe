@@ -171,7 +171,7 @@ int main(int argc, char **argv){
 //		sampling_time=delta_t.count();
 		start=std::chrono::high_resolution_clock::now();
 
-		if(Sbus[4]>1500 && Sbus[8]>1500 && pos.z < -0.2) in_flight=true;
+		if(Sbus[4]>1500 && pos.z < -0.4) in_flight=true;
 		else in_flight = false;
 
 		mhe_get_measurements_control_inputs();

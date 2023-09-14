@@ -224,7 +224,7 @@ double Fe_cutoff_freq = 1.0;
 
 static double r_arm = 0.3025;// m // diagonal length between thruster x2
 static double l_servo = 0.035;
-static double mass = 7.4;//	!!!!PLEASE CHECK the position_dob_m!!!!
+static double mass = 6.2;//	!!!!PLEASE CHECK the position_dob_m!!!!
 static double r2=sqrt(2);
 
 
@@ -443,7 +443,7 @@ void external_force_estimation();
 void admittance_controller();
 
 double position_dob_fc=0.1;
-double position_dob_m=7.4;
+double position_dob_m=6.2;
 double dhat_X_ddot = 0;
 double dhat_Y_ddot = 0; 
 double dhat_Z_ddot = 0; 
@@ -1050,7 +1050,7 @@ void rpyT_ctrl() {
 	if(altitude_mode){
 		desired_lin_vel.z = Z_ddot_d; // But this is desired acceleration
 		if(!attitude_mode) F_zd = mass*(X_tilde_ddot_d*(sin(imu_rpy.x)*sin(imu_rpy.z)+cos(imu_rpy.x)*cos(imu_rpy.z)*sin(imu_rpy.y))-Y_tilde_ddot_d*(cos(imu_rpy.z)*sin(imu_rpy.x)-cos(imu_rpy.x)*sin(imu_rpy.y)*sin(imu_rpy.z))+(Z_tilde_ddot_d)*cos(imu_rpy.x)*cos(imu_rpy.y));
-		else F_zd = mass*(Z_ddot_d);
+		else F_zd = mass*(Z_tilde_ddot_d);
 		//ROS_INFO("Altitude");
 	}
 	else{
@@ -1063,8 +1063,8 @@ void rpyT_ctrl() {
 		position_dob();
 		ROS_INFO("DOB mode");	
 	}
-	if(F_zd > -0.5*mass*g) F_zd = -0.5*mass*g;
-	if(F_zd <= -1.5*mass*g) F_zd = -1.5*mass*g; //1.5
+	if(F_zd >= -0.5*mass*g) F_zd = -0.5*mass*g;
+	if(F_zd <= -2.0*mass*g) F_zd = -2.0*mass*g; 
 	
 
 	//DOB-----------------------------------------------------
@@ -1485,7 +1485,7 @@ void pwm_Calibration(){
 
 
 void pid_Gain_Setting(){
-	if(Sbus[7]<=1500){
+	if(!tilt_mode){
 		Par = conv_Pa;
 		Iar = conv_Ia;
 		Dar = conv_Da;
