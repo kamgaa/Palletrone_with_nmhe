@@ -29,7 +29,7 @@ int n_states=18; //pos vel att omega ext_F ext_T
 int n_controls=6; // Force Torque
 int n_outputs=15; // pos vel att omega imu_acl
 double Jxx=0.01; double Jyy=0.01; double Jzz=0.1;
-double mass=7.4; double g=9.81; double PI=3.141592;
+double mass=8.0; double g=9.81; double PI=3.141592;
 
 DM MHE_control_inputs = DM::zeros(n_controls,N_MHE+1);
 DM MHE_measurements = DM::zeros(n_outputs,N_MHE+1);
@@ -383,7 +383,7 @@ void mhe_set_initial(){
 	opti.set_initial(MHE_z_vel,0);
 	opti.set_initial(MHE_roll,0);
 	opti.set_initial(MHE_pitch,0);
-	opti.set_initial(MHE_yaw,PI/4.0);
+	opti.set_initial(MHE_yaw,0);
 	opti.set_initial(MHE_omega_x,0);
 	opti.set_initial(MHE_omega_y,0);
 	opti.set_initial(MHE_omega_z,0);

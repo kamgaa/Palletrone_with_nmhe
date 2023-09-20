@@ -136,6 +136,7 @@ bool PCA9685Activity::set(uint8_t channel, uint16_t value) {
     }
 
     _i2c_smbus_write_i2c_block_data(file, PCA9685_CHANNEL_0_REG + (channel * 4), 4, values);
+    return true;
 }
 
 // ******** public methods ******** //

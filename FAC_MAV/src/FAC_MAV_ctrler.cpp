@@ -58,7 +58,7 @@
 #include "nav_msgs/Odometry.h"
 
 double freq=200;//controller loop frequency
-double pwm_freq=417.3;//pwm signal frequency
+double pwm_freq=428.0;//pwm signal frequency 
 
 std::chrono::duration<double> delta_t;
 int16_t Sbus[10];
@@ -224,7 +224,7 @@ double Fe_cutoff_freq = 1.0;
 
 static double r_arm = 0.3025;// m // diagonal length between thruster x2
 static double l_servo = 0.035;
-static double mass = 6.2;//	!!!!PLEASE CHECK the position_dob_m!!!!
+static double mass = 8.0;//	!!!!PLEASE CHECK the position_dob_m!!!!
 static double r2=sqrt(2);
 
 
@@ -267,7 +267,7 @@ double z_c_hat=0.0;
 //Control gains===========================================
 
 //integratior(PID) limitation
-double integ_limit=10;
+double integ_limit=30;
 double z_integ_limit=100;
 double pos_integ_limit=10;
 double vel_integ_limit=10;
@@ -442,8 +442,8 @@ void get_Rotation_matrix();
 void external_force_estimation();
 void admittance_controller();
 
-double position_dob_fc=0.1;
-double position_dob_m=6.2;
+double position_dob_fc=2.0;
+double position_dob_m=8.0;
 double dhat_X_ddot = 0;
 double dhat_Y_ddot = 0; 
 double dhat_Z_ddot = 0; 
@@ -821,12 +821,12 @@ void publisherSet(){
 		//pwm_Command(1000,1000,1000,Sbus[2],1000,1000,1000,1000);
 
 		rpyT_ctrl();
-	//	pwm_Arm();		
-
+		//pwm_Arm();		
+	
 		//ROS_INFO("Arm mode");	
 	}
 
-//	pwm_Calibration();	
+	//pwm_Calibration();	
 	angle_d.x=r_d;
 	angle_d.y=p_d;
 	angle_d.z=y_d;
@@ -868,6 +868,7 @@ void publisherSet(){
 	prev_lin_vel = lin_vel;
 	mass_pub.publish(mass_topic);
 	non_bias_external_force_pub.publish(non_bias_external_force);
+	force_dhat_pub.publish(force_dhat);
 
 }
 
@@ -930,6 +931,15 @@ void rpyT_ctrl() {
 	double e_Y_dot = 0;
 		
 	//ROS_INFO("%lf",time_count);
+
+	double global_X_ddot = (lin_vel.x - prev_lin_vel.x)/delta_t.count();
+	double global_Y_ddot = (lin_vel.y - prev_lin_vel.y)/delta_t.count();
+	x_ax_dot=-accel_cutoff_freq*x_ax+global_X_ddot;
+	x_ax+=x_ax_dot*delta_t.count();
+	lin_acl.x=accel_cutoff_freq*x_ax;
+	x_ay_dot=-accel_cutoff_freq*x_ay+global_Y_ddot;
+	x_ay+=x_ay_dot*delta_t.count();
+	lin_acl.y=accel_cutoff_freq*x_ay;
 
 	e_Z = Z_d - pos.z;
 	e_Z_i += e_Z * delta_t.count();	
@@ -1061,7 +1071,7 @@ void rpyT_ctrl() {
 	if(DOB_mode){
 		//disturbance_Observer();
 		position_dob();
-		ROS_INFO("DOB mode");	
+	//	ROS_INFO("DOB mode");	
 	}
 	if(F_zd >= -0.5*mass*g) F_zd = -0.5*mass*g;
 	if(F_zd <= -2.0*mass*g) F_zd = -2.0*mass*g; 
@@ -1152,18 +1162,25 @@ void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thr
 
 double Force_to_PWM(double F) {
 	double pwm;
-	//double A = -9.8*pow(10.0,-8.0)*pow(voltage,2.0)+3.23*pow(10.0,-6.0)*voltage-1.8*pow(10.0,-5.0);
-	//double B = 0.000243*pow(voltage,2.0)-0.00663*voltage+0.03723;
-	//double C = -0.11063*pow(voltage,2.0)+2.332691*voltage-10.885;
+	double A = -8.1332*pow(10.0,-8.0)*pow(voltage,2.0)+5.5525*pow(10.0,-6.0)*voltage-4.5119*pow(10.0,-5.0);
+	double B = 0.00014354*pow(voltage,2.0)-0.0087694*voltage+0.065575;
+	double C = -0.028531*pow(voltage,2.0)+1.7194*voltage-6.2575;
+	/*
 	double param1 = 710;//-B/(2.0*A);
 	double param2 = 0.00016;//1.0/A;
 	double param3 = 0.00041888;//(pow(B,2.0)-4*A*C)/(4*pow(A,2.0));
 	double param4 = 0.00008;
+	*/
+
+	double param1 = -B/(2.0*A);
+	double param2 = 1.0/A;
+	double param3 = (pow(B,2.0)-4*A*C)/(4*pow(A,2.0));
+	//	double param4 = 0.00008;
 	//Force=A*pwm^2+B*pwm+C
 	// A = 0.00004 / B = -0.0568 / C = 17.546 
 
 	if(param2*F+param3>0){
-		pwm = param1 + sqrt(param2 * F + param3)/param4;
+		pwm = param1 + sqrt(param2 * F + param3);
 		// ROS_INFO("%lf",pwm);
 	}
 	else pwm = 1100.;
@@ -1478,8 +1495,12 @@ void pwm_Arm(){
 void pwm_Calibration(){
 	//if(Sbus[4]>1500) pwm_Arm();
 	//else pwm_Kill();
-        if(Sbus[6]>1700) pwm_Kill();
-	if(Sbus[6]<1000) pwm_Arm();
+        if(kill_mode==true){
+		pwm_Kill();
+	}
+	else{
+	       	pwm_Max();
+	}
 //ROS_INFO("Sbus[6] : %d", Sbus[6]);	
 }
 
@@ -1656,20 +1677,6 @@ void get_Rotation_matrix(){
 	Eigen::Vector3d Fe;
 	Eigen::Vector3d body_accel_error;
 
-	body_accel_error << body_x_ddot_error, body_y_ddot_error, body_z_ddot_error;
-	Fe = mass*Rotz*Roty*Rotx*body_accel_error;
-	
-	Fe_x_x_dot = -Fe_cutoff_freq*Fe_x_x+Fe(0);
-	Fe_x_x+=Fe_x_x_dot*delta_t.count();
-	Fe_y_x_dot = -Fe_cutoff_freq*Fe_y_x+Fe(1);
-	Fe_y_x+=Fe_y_x_dot*delta_t.count();
-	Fe_z_x_dot = -Fe_cutoff_freq*Fe_z_x+Fe(2);
-	Fe_z_x+=Fe_z_x_dot*delta_t.count();
-
-	external_force.x=Fe_cutoff_freq*Fe_x_x;
-	external_force.y=Fe_cutoff_freq*Fe_y_x;
-	external_force.z=Fe_cutoff_freq*Fe_z_x;
-
 	if(fabs(external_force.x)<external_force_deadzone) external_force.x=0;
 	if(fabs(external_force.y)<external_force_deadzone) external_force.y=0;
 	if(fabs(external_force.z)<external_force_deadzone) external_force.z=0;
@@ -1707,40 +1714,40 @@ void position_dob(){
 	MinvQ_X_x+=MinvQ_X_x_dot*delta_t.count();
 	MinvQ_X_y=MinvQ_C*MinvQ_X_x;
 	
-	Q_X_x_dot=Q_A*Q_X_x+Q_B*X_tilde_ddot_d;
+	Q_X_x_dot=Q_A*Q_X_x+Q_B*position_dob_m*X_tilde_ddot_d;
 	Q_X_x+=Q_X_x_dot*delta_t.count();
 	Q_X_y=Q_C*Q_X_x;
 
-	dhat_X_ddot=MinvQ_X_y(0)-Q_X_y(0);
+	dhat_X_ddot=(MinvQ_X_y(0)-Q_X_y(0))/position_dob_m;
 
 
 	MinvQ_Y_x_dot=MinvQ_A*MinvQ_Y_x+MinvQ_B*pos.y;
 	MinvQ_Y_x+=MinvQ_Y_x_dot*delta_t.count();
 	MinvQ_Y_y=MinvQ_C*MinvQ_Y_x;
 	
-	Q_Y_x_dot=Q_A*Q_Y_x+Q_B*Y_tilde_ddot_d;
+	Q_Y_x_dot=Q_A*Q_Y_x+Q_B*position_dob_m*Y_tilde_ddot_d;
 	Q_Y_x+=Q_Y_x_dot*delta_t.count();
 	Q_Y_y=Q_C*Q_Y_x;
 
-	dhat_Y_ddot=MinvQ_Y_y(0)-Q_Y_y(0);
+	dhat_Y_ddot=(MinvQ_Y_y(0)-Q_Y_y(0))/position_dob_m;
 
 	MinvQ_Z_x_dot=MinvQ_A*MinvQ_Z_x+MinvQ_B*pos.z;
 	MinvQ_Z_x+=MinvQ_Z_x_dot*delta_t.count();
 	MinvQ_Z_y=MinvQ_C*MinvQ_Z_x;
 	
-	Q_Z_x_dot=Q_A*Q_Z_x+Q_B*Z_tilde_ddot_d;
+	Q_Z_x_dot=Q_A*Q_Z_x+Q_B*position_dob_m*(Z_tilde_ddot_d+g);
 	Q_Z_x+=Q_Z_x_dot*delta_t.count();
 	Q_Z_y=Q_C*Q_Z_x;
 
-	dhat_Z_ddot=MinvQ_Z_y(0)-Q_Z_y(0);
+	dhat_Z_ddot=(MinvQ_Z_y(0)-Q_Z_y(0))/position_dob_m;
 	
 /*	X_tilde_r=X_r-dhat_X;
 	Y_tilde_r=Y_r-dhat_Y;
 	Z_tilde_r=Z_r-dhat_Z;*/
 
-	force_dhat.x=dhat_X_ddot*mass;
-	force_dhat.y=dhat_Y_ddot*mass;
-	force_dhat.z=dhat_Z_ddot*mass;
+	force_dhat.x=dhat_X_ddot*position_dob_m;
+	force_dhat.y=dhat_Y_ddot*position_dob_m;
+	force_dhat.z=dhat_Z_ddot*position_dob_m;
 
 	
 	/*reference_position.x=X_tilde_r;
