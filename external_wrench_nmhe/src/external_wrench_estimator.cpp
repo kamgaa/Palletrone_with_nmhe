@@ -151,7 +151,7 @@ int main(int argc, char **argv){
 	ros::Subscriber measurement_velocity_sub=nh.subscribe("/lin_vel",1,measurement_velocity_Callback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber measurement_attitude_sub=nh.subscribe("/angle",1,measurement_attitude_Callback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber measurement_omega_sub=nh.subscribe("/angular_velocity",1,measurement_omega_Callback,ros::TransportHints().tcpNoDelay());
-	ros::Subscriber measurement_imu_acl_sub=nh.subscribe("/lin_acl",1,measurement_imu_acl_Callback,ros::TransportHints().tcpNoDelay());
+	ros::Subscriber measurement_imu_acl_sub=nh.subscribe("/imu_lin_acl",1,measurement_imu_acl_Callback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber sbus_sub=nh.subscribe("/sbus",100,sbus_Callback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber force_DOB_result_sub=nh.subscribe("/force_dhat",1,force_DOB_result_Callback,ros::TransportHints().tcpNoDelay());
 
@@ -174,9 +174,12 @@ int main(int argc, char **argv){
 		if(Sbus[4]>1500 && pos.z < -0.4) in_flight=true;
 		else in_flight = false;
 
+
 		mhe_get_measurements_control_inputs();
-		if(in_flight) mhe_external_wrench_estimation();
-		
+		if(in_flight) {
+			mhe_external_wrench_estimation();
+		}
+
 		external_force_pub.publish(external_force);
 		external_torque_pub.publish(external_torque);
 		mhe_delta_t_pub.publish(mhe_delta_t);
@@ -303,9 +306,12 @@ void mhe_get_measurements_control_inputs(){
 
 void mhe_nlp_setting(){
 	
+	output_stage_cost_weight(9,9)=0.01;
+	output_stage_cost_weight(10,10)=0.01;
+	output_stage_cost_weight(11,11)=0.01;
 	output_stage_cost_weight(12,12)=0.01;
 	output_stage_cost_weight(13,13)=0.01;
-	output_stage_cost_weight(14,14)=0.005;
+	output_stage_cost_weight(14,14)=0.01;
 
 	for(int k=0; k<N_MHE+1; k++){
 		MX st=MHE_X(all_elem,k);
@@ -365,9 +371,9 @@ void mhe_nlp_setting(){
 	solver_option["ipopt.max_iter"]=1000;
 	solver_option["print_time"]=0;
 	solver_option["ipopt.print_level"]=0;
-	solver_option["ipopt.tol"]=1e-0;
-	solver_option["ipopt.acceptable_tol"]=1e-0;
-	solver_option["ipopt.acceptable_obj_change_tol"]=1e-2;
+	solver_option["ipopt.tol"]=1e-6;
+	solver_option["ipopt.acceptable_tol"]=1e-6;
+	solver_option["ipopt.acceptable_obj_change_tol"]=1e-8;
 
 	opti.solver("ipopt",solver_option);	
 
@@ -375,25 +381,25 @@ void mhe_nlp_setting(){
 
 void mhe_set_initial(){
 	
-	opti.set_initial(MHE_x_pos,0);
-	opti.set_initial(MHE_y_pos,0);
-	opti.set_initial(MHE_z_pos,0);
-	opti.set_initial(MHE_x_vel,0);
-	opti.set_initial(MHE_y_vel,0);
-	opti.set_initial(MHE_z_vel,0);
-	opti.set_initial(MHE_roll,0);
-	opti.set_initial(MHE_pitch,0);
-	opti.set_initial(MHE_yaw,0);
-	opti.set_initial(MHE_omega_x,0);
-	opti.set_initial(MHE_omega_y,0);
-	opti.set_initial(MHE_omega_z,0);
-	opti.set_initial(MHE_F_ex,0);
-	opti.set_initial(MHE_F_ey,0);
-	opti.set_initial(MHE_F_ez,0);
-	opti.set_initial(MHE_tau_ex,0);
-	opti.set_initial(MHE_tau_ey,0);
-	opti.set_initial(MHE_tau_ez,0);
 	
+		opti.set_initial(MHE_x_pos,0);
+		opti.set_initial(MHE_y_pos,0);
+		opti.set_initial(MHE_z_pos,0);
+		opti.set_initial(MHE_x_vel,0);
+		opti.set_initial(MHE_y_vel,0);
+		opti.set_initial(MHE_z_vel,0);
+		opti.set_initial(MHE_roll,0);
+		opti.set_initial(MHE_pitch,0);
+		opti.set_initial(MHE_yaw,0);
+		opti.set_initial(MHE_omega_x,0);
+		opti.set_initial(MHE_omega_y,0);
+		opti.set_initial(MHE_omega_z,0);
+		opti.set_initial(MHE_F_ex,0);
+		opti.set_initial(MHE_F_ey,0);
+		opti.set_initial(MHE_F_ez,0);
+		opti.set_initial(MHE_tau_ex,0);
+		opti.set_initial(MHE_tau_ey,0);
+		opti.set_initial(MHE_tau_ez,0);
 }
 
 void mhe_external_wrench_estimation(){
@@ -418,24 +424,25 @@ void mhe_external_wrench_estimation(){
 	external_torque.y=(double)MHE_X_star(16,N_MHE);
 	external_torque.z=(double)MHE_X_star(17,N_MHE);
 
-	opti.set_initial(MHE_x_pos,horzcat(MHE_X_star(0,Slice(1,N_MHE+1,1)),MHE_X_star(0,N_MHE)));
-	opti.set_initial(MHE_y_pos,horzcat(MHE_X_star(1,Slice(1,N_MHE+1,1)),MHE_X_star(1,N_MHE)));
-	opti.set_initial(MHE_z_pos,horzcat(MHE_X_star(2,Slice(1,N_MHE+1,1)),MHE_X_star(2,N_MHE)));
-	opti.set_initial(MHE_x_vel,horzcat(MHE_X_star(3,Slice(1,N_MHE+1,1)),MHE_X_star(3,N_MHE)));
-	opti.set_initial(MHE_y_vel,horzcat(MHE_X_star(4,Slice(1,N_MHE+1,1)),MHE_X_star(4,N_MHE)));
-	opti.set_initial(MHE_z_vel,horzcat(MHE_X_star(5,Slice(1,N_MHE+1,1)),MHE_X_star(5,N_MHE)));
-	opti.set_initial(MHE_roll,horzcat(MHE_X_star(6,Slice(1,N_MHE+1,1)),MHE_X_star(6,N_MHE)));
-	opti.set_initial(MHE_pitch,horzcat(MHE_X_star(7,Slice(1,N_MHE+1,1)),MHE_X_star(7,N_MHE)));
-	opti.set_initial(MHE_yaw,horzcat(MHE_X_star(8,Slice(1,N_MHE+1,1)),MHE_X_star(8,N_MHE)));
-	opti.set_initial(MHE_omega_x,horzcat(MHE_X_star(9,Slice(1,N_MHE+1,1)),MHE_X_star(9,N_MHE)));
-	opti.set_initial(MHE_omega_y,horzcat(MHE_X_star(10,Slice(1,N_MHE+1,1)),MHE_X_star(10,N_MHE)));
-	opti.set_initial(MHE_omega_z,horzcat(MHE_X_star(11,Slice(1,N_MHE+1,1)),MHE_X_star(11,N_MHE)));
-	opti.set_initial(MHE_F_ex,horzcat(MHE_X_star(12,Slice(1,N_MHE+1,1)),MHE_X_star(12,N_MHE)));
-	opti.set_initial(MHE_F_ey,horzcat(MHE_X_star(13,Slice(1,N_MHE+1,1)),MHE_X_star(13,N_MHE)));
-	opti.set_initial(MHE_F_ez,horzcat(MHE_X_star(14,Slice(1,N_MHE+1,1)),MHE_X_star(14,N_MHE)));
-	opti.set_initial(MHE_tau_ex,horzcat(MHE_X_star(15,Slice(1,N_MHE+1,1)),MHE_X_star(15,N_MHE)));
-	opti.set_initial(MHE_tau_ey,horzcat(MHE_X_star(16,Slice(1,N_MHE+1,1)),MHE_X_star(16,N_MHE)));
-	opti.set_initial(MHE_tau_ez,horzcat(MHE_X_star(17,Slice(1,N_MHE+1,1)),MHE_X_star(17,N_MHE)));
+
+		opti.set_initial(MHE_x_pos,horzcat(MHE_X_star(0,Slice(1,N_MHE+1,1)),MHE_X_star(0,N_MHE)));
+		opti.set_initial(MHE_y_pos,horzcat(MHE_X_star(1,Slice(1,N_MHE+1,1)),MHE_X_star(1,N_MHE)));
+		opti.set_initial(MHE_z_pos,horzcat(MHE_X_star(2,Slice(1,N_MHE+1,1)),MHE_X_star(2,N_MHE)));
+		opti.set_initial(MHE_x_vel,horzcat(MHE_X_star(3,Slice(1,N_MHE+1,1)),MHE_X_star(3,N_MHE)));
+		opti.set_initial(MHE_y_vel,horzcat(MHE_X_star(4,Slice(1,N_MHE+1,1)),MHE_X_star(4,N_MHE)));
+		opti.set_initial(MHE_z_vel,horzcat(MHE_X_star(5,Slice(1,N_MHE+1,1)),MHE_X_star(5,N_MHE)));
+		opti.set_initial(MHE_roll,horzcat(MHE_X_star(6,Slice(1,N_MHE+1,1)),MHE_X_star(6,N_MHE)));
+		opti.set_initial(MHE_pitch,horzcat(MHE_X_star(7,Slice(1,N_MHE+1,1)),MHE_X_star(7,N_MHE)));
+		opti.set_initial(MHE_yaw,horzcat(MHE_X_star(8,Slice(1,N_MHE+1,1)),MHE_X_star(8,N_MHE)));
+		opti.set_initial(MHE_omega_x,horzcat(MHE_X_star(9,Slice(1,N_MHE+1,1)),MHE_X_star(9,N_MHE)));
+		opti.set_initial(MHE_omega_y,horzcat(MHE_X_star(10,Slice(1,N_MHE+1,1)),MHE_X_star(10,N_MHE)));
+		opti.set_initial(MHE_omega_z,horzcat(MHE_X_star(11,Slice(1,N_MHE+1,1)),MHE_X_star(11,N_MHE)));
+		opti.set_initial(MHE_F_ex,horzcat(MHE_X_star(12,Slice(1,N_MHE+1,1)),MHE_X_star(12,N_MHE)));
+		opti.set_initial(MHE_F_ey,horzcat(MHE_X_star(13,Slice(1,N_MHE+1,1)),MHE_X_star(13,N_MHE)));
+		opti.set_initial(MHE_F_ez,horzcat(MHE_X_star(14,Slice(1,N_MHE+1,1)),MHE_X_star(14,N_MHE)));
+		opti.set_initial(MHE_tau_ex,horzcat(MHE_X_star(15,Slice(1,N_MHE+1,1)),MHE_X_star(15,N_MHE)));
+		opti.set_initial(MHE_tau_ey,horzcat(MHE_X_star(16,Slice(1,N_MHE+1,1)),MHE_X_star(16,N_MHE)));
+		opti.set_initial(MHE_tau_ez,horzcat(MHE_X_star(17,Slice(1,N_MHE+1,1)),MHE_X_star(17,N_MHE)));
 
 //	opti.set_initial(MHE_W,MHE_W_tilde);
 //	opti.set_initial(MHE_V,MHE_V_tilde);

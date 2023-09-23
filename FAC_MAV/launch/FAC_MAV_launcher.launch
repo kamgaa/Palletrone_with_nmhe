@@ -110,8 +110,8 @@
 
 		<!--Tilt Mode Position gains-->
 		<param name="tilt_position_P_gain"	value="2.0"/>	
-		<param name="tilt_position_I_gain"	value="0.001"/>	
-		<param name="tilt_position_D_gain"	value="1.0"/>	
+		<param name="tilt_position_I_gain"	value="0.01"/>	
+		<param name="tilt_position_D_gain"	value="1.5"/>	
 
     	<node name="FAC_MAV_node"  pkg="FAC_MAV" type="FAC_MAV_ctrler"  output="screen"/>
 	<node name="external_wrench_estimator_node" pkg="external_wrench_nmhe" type="external_wrench_estimator" output="screen"/>

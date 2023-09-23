@@ -334,7 +334,7 @@ double voltage_old=22.4;
 
 //-DOB----------------------------------------------------
 geometry_msgs::Vector3 dhat;
-double fq_cutoff=0.5;//Q filter Cut-off frequency
+double fq_cutoff=0.1;//Q filter Cut-off frequency
 
 // Nominal MoI
 double J_x = 0.01;
@@ -442,7 +442,7 @@ void get_Rotation_matrix();
 void external_force_estimation();
 void admittance_controller();
 
-double position_dob_fc=2.0;
+double position_dob_fc=0.1;
 double position_dob_m=8.0;
 double dhat_X_ddot = 0;
 double dhat_Y_ddot = 0; 
@@ -728,7 +728,7 @@ int main(int argc, char **argv){
 	Forces = nh.advertise<std_msgs::Float32MultiArray>("Forces",100); // F 1,2,3,4
 	desired_torque = nh.advertise<geometry_msgs::Vector3>("torque_d",100);
 	linear_velocity = nh.advertise<geometry_msgs::Vector3>("lin_vel",100);
-	angular_velocity = nh.advertise<geometry_msgs::Vector3>("gyro",100);
+	angular_velocity = nh.advertise<geometry_msgs::Vector3>("angular_velocity",100);
 	desired_position = nh.advertise<geometry_msgs::Vector3>("pos_d",100);
 	position = nh.advertise<geometry_msgs::Vector3>("pos",100);
 	desired_force = nh.advertise<geometry_msgs::Vector3>("force_d",100);
@@ -739,7 +739,7 @@ int main(int argc, char **argv){
 	Center_of_Mass = nh.advertise<geometry_msgs::Vector3>("Center_of_Mass",100);
 	angular_Acceleration = nh.advertise<geometry_msgs::Vector3>("ang_accel",100);
 	sine_wave_data = nh.advertise<geometry_msgs::Vector3>("sine_wave",100);
-	disturbance = nh.advertise<geometry_msgs::Vector3>("dhat",100);
+	disturbance = nh.advertise<geometry_msgs::Vector3>("att_dhat",100);
 	linear_acceleration = nh.advertise<geometry_msgs::Vector3>("imu_lin_acl",100);
 	//External_force_data = nh.advertise<geometry_msgs::Vector3>("external_force",100);
 	reference_desired_pos_error = nh.advertise<geometry_msgs::Vector3>("pos_e",100);
@@ -857,10 +857,11 @@ void publisherSet(){
 	delta_time.publish(dt);
 	desired_velocity.publish(desired_lin_vel);
 	Center_of_Mass.publish(CoM);
+	angular_velocity.publish(imu_ang_vel);
 	angular_Acceleration.publish(angular_Accel);
 	sine_wave_data.publish(sine_wave); //not use
-	disturbance.publish(dhat); // not use
-	linear_acceleration.publish(lin_acl);
+	disturbance.publish(dhat);
+	linear_acceleration.publish(imu_lin_acc);
 	//External_force_data.publish(external_force);
 	reference_desired_pos_error.publish(desired_position_change);
 	reference_pos.publish(reference_position);
@@ -953,6 +954,12 @@ void rpyT_ctrl() {
 		e_Z_i = 0;
 		e_Z_dot_i = 0;
 			//ROS_INFO("Manual Thrust!!");
+	}
+
+	if(DOB_mode){
+		disturbance_Observer();
+		position_dob();
+	//	ROS_INFO("DOB mode");	
 	}
 
 	if(position_mode || velocity_mode){
@@ -1068,11 +1075,6 @@ void rpyT_ctrl() {
 		//ROS_INFO("Manual Thrust!!");
 	}
 
-	if(DOB_mode){
-		//disturbance_Observer();
-		position_dob();
-	//	ROS_INFO("DOB mode");	
-	}
 	if(F_zd >= -0.5*mass*g) F_zd = -0.5*mass*g;
 	if(F_zd <= -2.0*mass*g) F_zd = -2.0*mass*g; 
 	
@@ -1081,10 +1083,10 @@ void rpyT_ctrl() {
 		//disturbance_Observer();
 	//--------------------------------------------------------
 	
-	//tautilde_r_d = tau_r_d - dhat_r;
-	//tautilde_p_d = tau_p_d - dhat_p;
+	tautilde_r_d = tau_r_d;// - dhat_r;
+	tautilde_p_d = tau_p_d;// - dhat_p;
 	//u << tau_r_d, tau_p_d, tau_y_d, F_zd;
-	//u << tautilde_r_d, tautilde_p_d, tau_y_d, F_zd;
+	u << tautilde_r_d, tautilde_p_d, tau_y_d, F_zd;
 	torque_d.x = tau_r_d;
 	torque_d.y = tau_p_d;
 	torque_d.z = tau_y_d;
@@ -1093,7 +1095,7 @@ void rpyT_ctrl() {
 	force_d.z = F_zd;
 
 	
-	u << tau_r_d, tau_p_d, tau_y_d, F_zd;
+//	u << tau_r_d, tau_p_d, tau_y_d, F_zd;
 	//u << tau_r_d, tau_p_d, tau_y_d-tau_y_sin, F_zd;
 	//std::cout << "tau_y_sin : " << tau_y_sin << "    ";	
 	prev_angular_Vel = imu_ang_vel;
@@ -1262,7 +1264,7 @@ sensor_msgs::JointState servo_msg_create(double desired_theta1, double desired_t
 
 void sbusCallback(const std_msgs::Int16MultiArray::ConstPtr& array){
 	for(int i=0;i<10;i++){
-		Sbus[i]=map<int16_t>(array->data[i], 352, 1696, 1000, 2000);
+		Sbus[i]=map<int16_t>(array->data[i], 352, 1696, 1000, 2200);
 	}
 	
 	if(Sbus[4]<1500) {
@@ -1474,10 +1476,10 @@ void pwm_Arm(){
 	PWMs_cmd.data[2] = 1500;
 	PWMs_cmd.data[3] = 1500;
 	PWMs_val.data.resize(16);
-	PWMs_val.data[0] = pwmMapping(1500.);
-	PWMs_val.data[1] = pwmMapping(1500.);
-	PWMs_val.data[2] = pwmMapping(1500.);
-	PWMs_val.data[3] = pwmMapping(1500.);
+	PWMs_val.data[0] = pwmMapping(2200.);
+	PWMs_val.data[1] = pwmMapping(2200.);
+	PWMs_val.data[2] = pwmMapping(2200.);
+	PWMs_val.data[3] = pwmMapping(2200.);
 	PWMs_val.data[4] = -1;
 	PWMs_val.data[5] = -1;
 	PWMs_val.data[6] = -1;
