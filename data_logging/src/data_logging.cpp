@@ -55,6 +55,7 @@ geometry_msgs::Vector3 adaptive_external_force;
 geometry_msgs::Vector3 adaptive_external_torque;
 //geometry_msgs::Vector3 MoI;
 geometry_msgs::Vector3 force_dhat;
+geometry_msgs::Vector3 torque_dhat;
 
 double PWM_cmd[8]={1000., 1000., 1000., 1000., 1000., 1000., 1000., 1000.};
 double individual_motor_thrust[4]={0.0, 0.0, 0.0, 0.0};
@@ -106,6 +107,7 @@ void adaptive_external_torque_callback(const geometry_msgs::Vector3& msg);
 void adaptive_mhe_delta_t_callback(const std_msgs::Float32& msg);
 //void MoI_callback(const geometry_msgs::Vector3& msg);
 void force_dhat_callback(const geometry_msgs::Vector3& msg);
+void torque_dhat_callback(const geometry_msgs::Vector3& msg);
 void publisherSet();
 
 
@@ -144,6 +146,7 @@ int main(int argc, char **argv)
 	ros::Subscriber calculated_force_log=nh.subscribe("/calculated_force",1,calculated_force_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber non_bias_external_force_log=nh.subscribe("/non_bias_external_force",1,non_bias_external_force_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber force_dhat_sub=nh.subscribe("/force_dhat",1,force_dhat_callback, ros::TransportHints().tcpNoDelay());
+	ros::Subscriber torque_dhat_sub=nh.subscribe("/torque_dhat",1,force_dhat_callback, ros::TransportHints().tcpNoDelay());
 
 
 	data_log_publisher=nh.advertise<std_msgs::Float64MultiArray>("data_log",10);
@@ -154,7 +157,7 @@ int main(int argc, char **argv)
 
 void publisherSet()
 {
-	data_log.data.resize(90);
+	data_log.data.resize(93);
 
 	data_log.data[0]=attitude.x;
 	data_log.data[1]=attitude.y;
@@ -246,7 +249,10 @@ void publisherSet()
 	data_log.data[87]=force_dhat.x;
 	data_log.data[88]=force_dhat.y;
 	data_log.data[89]=force_dhat.z;
-
+	data_log.data[90]=torque_dhat.x;
+	data_log.data[91]=torque_dhat.y;
+	data_log.data[92]=torque_dhat.z;
+	
 	data_log_publisher.publish(data_log);
 }
 
@@ -411,4 +417,8 @@ void adaptive_mhe_delta_t_callback(const std_msgs::Float32& msg){
 
 void force_dhat_callback(const geometry_msgs::Vector3& msg){
 	force_dhat=msg;
+}
+
+void torque_dhat_callback(const geometry_msgs::Vector3& msg){
+	torque_dhat=msg;
 }
