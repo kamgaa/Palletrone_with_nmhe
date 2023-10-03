@@ -146,7 +146,7 @@ int main(int argc, char **argv)
 	ros::Subscriber calculated_force_log=nh.subscribe("/calculated_force",1,calculated_force_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber non_bias_external_force_log=nh.subscribe("/non_bias_external_force",1,non_bias_external_force_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber force_dhat_sub=nh.subscribe("/force_dhat",1,force_dhat_callback, ros::TransportHints().tcpNoDelay());
-	ros::Subscriber torque_dhat_sub=nh.subscribe("/torque_dhat",1,force_dhat_callback, ros::TransportHints().tcpNoDelay());
+	ros::Subscriber torque_dhat_sub=nh.subscribe("/torque_dhat",1,torque_dhat_callback, ros::TransportHints().tcpNoDelay());
 
 
 	data_log_publisher=nh.advertise<std_msgs::Float64MultiArray>("data_log",10);
@@ -416,7 +416,9 @@ void adaptive_mhe_delta_t_callback(const std_msgs::Float32& msg){
 }*/
 
 void force_dhat_callback(const geometry_msgs::Vector3& msg){
-	force_dhat=msg;
+	force_dhat.x=msg.x;
+	force_dhat.y=msg.y;
+	force_dhat.z=msg.z;
 }
 
 void torque_dhat_callback(const geometry_msgs::Vector3& msg){

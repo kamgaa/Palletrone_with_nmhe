@@ -51,9 +51,9 @@
 	<param name="position_integ_limit"	value="3.0"/>
 
 	<!--Center of mass-->
-	<param name="x_center_of_mass"		value="-0.005"/>	
-	<param name="y_center_of_mass"		value="-0.011"/>	
-	<param name="z_center_of_mass"		value="-0.090"/> 	
+	<param name="x_center_of_mass"		value="-0.013"/>	
+	<param name="y_center_of_mass"		value="0.013"/>	
+	<param name="z_center_of_mass"		value="-0.084"/> 	
 
 	<!--Conventional flight mode-->
     		<!--Conventional Mode attitude_rp gains-->
@@ -114,7 +114,7 @@
 		<param name="tilt_position_D_gain"	value="1.5"/>	
 
     	<node name="FAC_MAV_node"  pkg="FAC_MAV" type="FAC_MAV_ctrler"  output="screen"/>
-	<node name="external_wrench_estimator_node" pkg="external_wrench_nmhe" type="external_wrench_estimator" output="screen"/>
+<!--	<node name="external_wrench_estimator_node" pkg="external_wrench_nmhe" type="external_wrench_estimator" output="screen"/> -->
 	<node pkg="data_logging" name="data_logging_node" type="data_logging"/>
 	
     

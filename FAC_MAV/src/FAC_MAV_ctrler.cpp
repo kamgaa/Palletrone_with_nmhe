@@ -440,6 +440,7 @@ void pid_Gain_Setting();
 void disturbance_Observer();
 void sine_wave_vibration();
 void get_Rotation_matrix();
+void Rotation_matrix();
 void external_force_estimation();
 void admittance_controller();
 
@@ -453,12 +454,14 @@ double X_tilde_r = 0;
 double Y_tilde_r = 0;
 double Z_tilde_r = 0;
 void position_dob();
+
+void force_dob();
 double force_dob_fc=0.1;
 double force_dob_m = 8.0;
-double dhat_F_X = 0;
-double dhat_F_Y = 0;
-double dhat_F_Z = 0;
-void force_dob();
+double dhat_F_X = .0;
+double dhat_F_Y = .0;
+double dhat_F_Z = .0;
+
 double torque_dob_fc=0.1;
 double dhat_tau_r = 0;
 double dhat_tau_p = 0;
@@ -534,6 +537,11 @@ Eigen::Vector3d cam_att;
 Eigen::Matrix3d Rotz;
 Eigen::Matrix3d Roty;
 Eigen::Matrix3d Rotx;
+//-----------------------------------------------------
+//Rotation_Matrix_for_force_dob--------------------------------------
+Eigen::Matrix3d RotZ;
+Eigen::Matrix3d RotY;
+Eigen::Matrix3d RotX;
 //-----------------------------------------------------
 
 
@@ -664,12 +672,12 @@ Eigen::MatrixXd Q_F_Z_y(1,1);
 //--------------torque DOB------------------------------
 
 Eigen::MatrixXd MinvQ_T_A(2,2);
-Eigen::MatrixXd MinvQ_T_B(2,2);
-Eigen::MatrixXd MinvQ_T_C(2,2);
-Eigen::MatrixXd Q_T_A(2,1);
+Eigen::MatrixXd MinvQ_T_B(2,1);
+Eigen::MatrixXd MinvQ_T_C_x(1,2);
+Eigen::MatrixXd MinvQ_T_C_y(1,2);
+Eigen::MatrixXd Q_T_A(2,2);
 Eigen::MatrixXd Q_T_B(2,1);
-Eigen::MatrixXd Q_T_C_x(1,2);
-Eigen::MatrixXd Q_T_C_y(1,2);
+Eigen::MatrixXd Q_T_C(1,2);
 
 Eigen::MatrixXd MinvQ_T_X_x(2,1);
 Eigen::MatrixXd MinvQ_T_X_x_dot(2,1);
@@ -779,33 +787,31 @@ int main(int argc, char **argv){
 	//------------------Force DoB Q filter----------------------
 	Q_F_A << -force_dob_fc;
 
-	Q_F_B << 1;
+	Q_F_B << 1.0;
 
 	Q_F_C << force_dob_fc;
 
 	MinvQ_F_A << -force_dob_fc;
 
-	MinvQ_F_B << 1;
+	MinvQ_F_B << 1.0;
 
-	MinvQ_F_C << force_dob_fc;
+	MinvQ_F_C << force_dob_m*force_dob_fc;
 
 	//------------------Torque DoB Q filter----------------------
 	Q_T_A << -r2*torque_dob_fc, -pow(torque_dob_fc,2),
-							 1,						0;
+			       1.0,		      0.0;
 
-	Q_T_B << 1,
-			 0;
+	Q_T_B << 1.0, 0.0;
 
-	Q_T_C << 				 0,  pow(torque_dob_fc,2);
+	Q_T_C << 0.0,  pow(torque_dob_fc,2);
 
 	MinvQ_T_A <<  -r2*torque_dob_fc, -pow(torque_dob_fc,2),
-							 1,						0;
+				    1.0,		   0.0;
 
-	MinvQ_T_B << 1,
-			 	 0;
+	MinvQ_T_B << 1.0, 0.0;
 
-	MinvQ_T_C_x << J_x*torque_dob_fc, 				0;
-	MinvQ_T_C_y << J_y*torque_dob_fc, 				0;
+	MinvQ_T_C_x << J_x*pow(torque_dob_fc,2), 				0.0;
+	MinvQ_T_C_y << J_y*pow(torque_dob_fc,2), 				0.0;
 
 	//Set Control Matrix----------------------------------------
 		setCM();
@@ -1054,11 +1060,13 @@ void rpyT_ctrl() {
 	}
 
 	if(DOB_mode){
+
+		disturbance_Observer();
 		force_dob();
 		torque_dob();
-		disturbance_Observer();
-	//	position_dob();
+	//`	position_dob();
 	//	ROS_INFO("DOB mode");	
+
 	}
 
 	if(position_mode || velocity_mode){
@@ -1181,9 +1189,9 @@ void rpyT_ctrl() {
 	//DOB-----------------------------------------------------
 		//disturbance_Observer();
 	//--------------------------------------------------------
-	torque_dob();
-	tautilde_r_d = tau_r_d- dhat_tau_r; 
-	tautilde_p_d = tau_p_d- dhat_tau_p;
+	//torque_dob();
+	tautilde_r_d = tau_r_d; //- dhat_r;// - dhat_tau_r; 
+	tautilde_p_d = tau_p_d; //- dhat_p;// - dhat_tau_p;
 	//u << tau_r_d, tau_p_d, tau_y_d, F_zd;
 	u << tautilde_r_d, tautilde_p_d, tau_y_d, F_zd;
 	torque_d.x = tau_r_d;
@@ -1363,7 +1371,7 @@ sensor_msgs::JointState servo_msg_create(double desired_theta1, double desired_t
 
 void sbusCallback(const std_msgs::Int16MultiArray::ConstPtr& array){
 	for(int i=0;i<10;i++){
-		Sbus[i]=map<int16_t>(array->data[i], 352, 1696, 1000, 2200);
+		Sbus[i]=map<int16_t>(array->data[i], 352, 1696, 1000, 2000);
 	}
 	
 	if(Sbus[4]<1500) {
@@ -1394,8 +1402,8 @@ void sbusCallback(const std_msgs::Int16MultiArray::ConstPtr& array){
 		position_mode=true;
 	}
 
-	if(Sbus[7]>1500) DOB_mode=false;
-	else DOB_mode=true;
+	if(Sbus[7]>1500) DOB_mode=true;
+	else DOB_mode=false;
 
 	if(Sbus[9]>1500) admittance_mode=true;
 	else admittance_mode=true;
@@ -1753,6 +1761,20 @@ void get_Rotation_matrix(){
                   0, cos(imu_rpy.x), -sin(imu_rpy.x),
                   0, sin(imu_rpy.x),  cos(imu_rpy.x);		  
 }
+
+void Rotation_matrix(){
+	RotZ << cos(imu_lin_acc.z), -sin(imu_lin_acc.z),   0,
+	        sin(imu_lin_acc.z),  cos(imu_lin_acc.z),   0,
+		             0,               0, 1.0;
+
+	RotY << cos(imu_lin_acc.y),   0, sin(imu_lin_acc.y),
+	                     0, 1.0,              0,
+	       -sin(imu_lin_acc.y),   0, cos(imu_lin_acc.y);
+
+	RotX << 1.0,              0,               0,
+                  0, cos(imu_lin_acc.x), -sin(imu_lin_acc.x),
+                  0, sin(imu_lin_acc.x),  cos(imu_lin_acc.x);		  
+}
 /*void external_force_estimation(){ 
    //----Estimate the external force in external_wrench_nmhe_node 2023.09.09----
 	get_Rotation_matrix();
@@ -1854,10 +1876,12 @@ void position_dob(){
 //	reference_position.x=X_tilde_r;
 //	reference_position.y=Y_tilde_r;
 //	reference_position.z=Z_tilde_r;
-}
-*/
+} */
+
 
 void force_dob(){
+	//Rotation_matrix();
+	
 	MinvQ_F_X_x_dot=MinvQ_F_A*MinvQ_F_X_x+MinvQ_F_B*imu_lin_acc.x;
 	MinvQ_F_X_x+=MinvQ_F_X_x_dot*delta_t.count();
 	MinvQ_F_X_y=MinvQ_F_C*MinvQ_F_X_x;
@@ -1882,11 +1906,12 @@ void force_dob(){
 	MinvQ_F_Z_x+=MinvQ_F_Z_x_dot*delta_t.count();
 	MinvQ_F_Z_y=MinvQ_F_C*MinvQ_F_Z_x;
 	
-	Q_F_Z_x_dot=Q_F_A*Q_F_Z_x+Q_F_B*force_dob_m*Z_tilde_ddot_d;
+	Q_F_Z_x_dot=Q_F_A*Q_F_Z_x+Q_F_B*force_dob_m*(Z_tilde_ddot_d+g);
 	Q_F_Z_x+=Q_F_Z_x_dot*delta_t.count();
 	Q_F_Z_y=Q_F_C*Q_F_Z_x;
 
 	dhat_F_Z=(MinvQ_F_Z_y(0)-Q_F_Z_y(0));
+
 	force_dhat.x=dhat_F_X;
 	force_dhat.y=dhat_F_Y;
 	force_dhat.z=dhat_F_Z;	
@@ -1897,7 +1922,7 @@ void torque_dob(){
 	MinvQ_T_X_x+=MinvQ_T_X_x_dot*delta_t.count();
 	MinvQ_T_X_y=MinvQ_T_C_x*MinvQ_T_X_x;
 	
-	Q_T_X_x_dot=Q_T_A*Q_T_X_x+Q_T_B*tilde_tau_r_d;
+	Q_T_X_x_dot=Q_T_A*Q_T_X_x+Q_T_B*tautilde_r_d;
 	Q_T_X_x+=Q_T_X_x_dot*delta_t.count();
 	Q_T_X_y=Q_T_C*Q_T_X_x;
 
@@ -1907,11 +1932,11 @@ void torque_dob(){
 	MinvQ_T_Y_x+=MinvQ_T_Y_x_dot*delta_t.count();
 	MinvQ_T_Y_y=MinvQ_T_C_y*MinvQ_T_Y_x;
 	
-	Q_T_Y_x_dot=Q_T_A*Q_T_Y_x+Q_T_B*tilde_tau_p_d;
+	Q_T_Y_x_dot=Q_T_A*Q_T_Y_x+Q_T_B*tautilde_p_d;
 	Q_T_Y_x+=Q_T_Y_x_dot*delta_t.count();
 	Q_T_Y_y=Q_T_C*Q_T_Y_x;
 
-	dhat_tau_r=(MinvQ_T_Y_y(0)-Q_T_Y_y(0));
+	dhat_tau_p=(MinvQ_T_Y_y(0)-Q_T_Y_y(0));
 
 	torque_dhat.x=dhat_tau_r;
 	torque_dhat.y=dhat_tau_p;
