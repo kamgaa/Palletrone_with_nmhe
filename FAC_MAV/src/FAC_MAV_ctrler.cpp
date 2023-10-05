@@ -462,7 +462,7 @@ double dhat_F_X = .0;
 double dhat_F_Y = .0;
 double dhat_F_Z = .0;
 
-double torque_dob_fc=0.2;
+double torque_dob_fc=0.5;
 double dhat_tau_r = 0;
 double dhat_tau_p = 0;
 double dhat_tau_y = 0;
