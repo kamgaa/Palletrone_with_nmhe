@@ -51,8 +51,8 @@
 	<param name="position_integ_limit"	value="3.0"/>
 
 	<!--Center of mass-->
-	<param name="x_center_of_mass"		value="-0.013"/>	
-	<param name="y_center_of_mass"		value="0.013"/>	
+	<param name="x_center_of_mass"		value="-0.0135"/><!-- -0.013-->	
+	<param name="y_center_of_mass"		value="0.015"/>	
 	<param name="z_center_of_mass"		value="-0.084"/> 	
 
 	<!--Conventional flight mode-->

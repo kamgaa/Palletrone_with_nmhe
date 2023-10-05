@@ -338,8 +338,8 @@ geometry_msgs::Vector3 dhat;
 double fq_cutoff=0.1;//Q filter Cut-off frequency
 
 // Nominal MoI
-double J_x = 0.01;
-double J_y = 0.01;
+double J_x = 0.001;
+double J_y = 0.001;
 double J_z = 0.1;
 
 //Roll DOB
@@ -456,13 +456,13 @@ double Z_tilde_r = 0;
 void position_dob();
 
 void force_dob();
-double force_dob_fc=0.1;
+double force_dob_fc=0.5;
 double force_dob_m = 8.0;
 double dhat_F_X = .0;
 double dhat_F_Y = .0;
 double dhat_F_Z = .0;
 
-double torque_dob_fc=0.1;
+double torque_dob_fc=0.2;
 double dhat_tau_r = 0;
 double dhat_tau_p = 0;
 double dhat_tau_y = 0;
@@ -1061,7 +1061,7 @@ void rpyT_ctrl() {
 
 	if(DOB_mode){
 
-		disturbance_Observer();
+		//disturbance_Observer();
 		force_dob();
 		torque_dob();
 	//`	position_dob();
@@ -1190,8 +1190,8 @@ void rpyT_ctrl() {
 		//disturbance_Observer();
 	//--------------------------------------------------------
 	//torque_dob();
-	tautilde_r_d = tau_r_d; //- dhat_r;// - dhat_tau_r; 
-	tautilde_p_d = tau_p_d; //- dhat_p;// - dhat_tau_p;
+	tautilde_r_d = tau_r_d- dhat_tau_r;//dhat_r;// - dhat_tau_r; 
+	tautilde_p_d = tau_p_d- dhat_tau_p;//dhat_p;// - dhat_tau_p;
 	//u << tau_r_d, tau_p_d, tau_y_d, F_zd;
 	u << tautilde_r_d, tautilde_p_d, tau_y_d, F_zd;
 	torque_d.x = tau_r_d;
@@ -1886,7 +1886,7 @@ void force_dob(){
 	MinvQ_F_X_x+=MinvQ_F_X_x_dot*delta_t.count();
 	MinvQ_F_X_y=MinvQ_F_C*MinvQ_F_X_x;
 	
-	Q_F_X_x_dot=Q_F_A*Q_F_X_x+Q_F_B*force_dob_m*X_tilde_ddot_d;
+	Q_F_X_x_dot=Q_F_A*Q_F_X_x+Q_F_B*F_xd;
 	Q_F_X_x+=Q_F_X_x_dot*delta_t.count();
 	Q_F_X_y=Q_F_C*Q_F_X_x;
 
@@ -1896,7 +1896,7 @@ void force_dob(){
 	MinvQ_F_Y_x+=MinvQ_F_Y_x_dot*delta_t.count();
 	MinvQ_F_Y_y=MinvQ_F_C*MinvQ_F_Y_x;
 	
-	Q_F_Y_x_dot=Q_F_A*Q_F_Y_x+Q_F_B*force_dob_m*Y_tilde_ddot_d;
+	Q_F_Y_x_dot=Q_F_A*Q_F_Y_x+Q_F_B*F_yd;
 	Q_F_Y_x+=Q_F_Y_x_dot*delta_t.count();
 	Q_F_Y_y=Q_F_C*Q_F_Y_x;
 
@@ -1906,7 +1906,7 @@ void force_dob(){
 	MinvQ_F_Z_x+=MinvQ_F_Z_x_dot*delta_t.count();
 	MinvQ_F_Z_y=MinvQ_F_C*MinvQ_F_Z_x;
 	
-	Q_F_Z_x_dot=Q_F_A*Q_F_Z_x+Q_F_B*force_dob_m*(Z_tilde_ddot_d+g);
+	Q_F_Z_x_dot=Q_F_A*Q_F_Z_x+Q_F_B*F_zd;
 	Q_F_Z_x+=Q_F_Z_x_dot*delta_t.count();
 	Q_F_Z_y=Q_F_C*Q_F_Z_x;
 
