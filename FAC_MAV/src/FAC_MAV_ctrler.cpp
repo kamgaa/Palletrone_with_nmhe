@@ -338,8 +338,8 @@ geometry_msgs::Vector3 dhat;
 double fq_cutoff=0.1;//Q filter Cut-off frequency
 
 // Nominal MoI
-double J_x = 0.001;
-double J_y = 0.001;
+double J_x = 0.002;
+double J_y = 0.002;
 double J_z = 0.1;
 
 //Roll DOB
@@ -423,10 +423,10 @@ void posCallback(const geometry_msgs::Vector3& msg);
 void rotCallback(const geometry_msgs::Quaternion& msg);
 void filterCallback(const sensor_msgs::Imu& msg);
 void t265OdomCallback(const nav_msgs::Odometry::ConstPtr& msg);
-void external_force_Callback(const geometry_msgs::Vector3& msg);
-void external_torque_Callback(const geometry_msgs::Vector3& msg);
-void adaptive_external_force_Callback(const geometry_msgs::Vector3& msg);
-void adaptive_external_torque_Callback(const geometry_msgs::Vector3& msg);
+//void external_force_Callback(const geometry_msgs::Vector3& msg);
+//void external_torque_Callback(const geometry_msgs::Vector3& msg);
+//void adaptive_external_force_Callback(const geometry_msgs::Vector3& msg);
+//void adaptive_external_torque_Callback(const geometry_msgs::Vector3& msg);
 void setCM();
 void setSA();
 void publisherSet();
@@ -456,13 +456,13 @@ double Z_tilde_r = 0;
 void position_dob();
 
 void force_dob();
-double force_dob_fc=0.5;
+double force_dob_fc=3.0;
 double force_dob_m = 8.0;
 double dhat_F_X = .0;
 double dhat_F_Y = .0;
 double dhat_F_Z = .0;
 
-double torque_dob_fc=0.5;
+double torque_dob_fc=5.0;
 double dhat_tau_r = 0;
 double dhat_tau_p = 0;
 double dhat_tau_y = 0;
@@ -675,6 +675,7 @@ Eigen::MatrixXd MinvQ_T_A(2,2);
 Eigen::MatrixXd MinvQ_T_B(2,1);
 Eigen::MatrixXd MinvQ_T_C_x(1,2);
 Eigen::MatrixXd MinvQ_T_C_y(1,2);
+Eigen::MatrixXd MinvQ_T_C_z(1,2);
 Eigen::MatrixXd Q_T_A(2,2);
 Eigen::MatrixXd Q_T_B(2,1);
 Eigen::MatrixXd Q_T_C(1,2);
@@ -691,6 +692,12 @@ Eigen::MatrixXd MinvQ_T_Y_y(1,1);
 Eigen::MatrixXd Q_T_Y_x(2,1);
 Eigen::MatrixXd Q_T_Y_x_dot(2,1);
 Eigen::MatrixXd Q_T_Y_y(1,1);
+Eigen::MatrixXd MinvQ_T_Z_x(2,1);
+Eigen::MatrixXd MinvQ_T_Z_x_dot(2,1);
+Eigen::MatrixXd MinvQ_T_Z_y(1,1);
+Eigen::MatrixXd Q_T_Z_x(2,1);
+Eigen::MatrixXd Q_T_Z_x_dot(2,1);
+Eigen::MatrixXd Q_T_Z_y(1,1);
 //-----------------------------------------------------
 int main(int argc, char **argv){
 	
@@ -812,6 +819,7 @@ int main(int argc, char **argv){
 
 	MinvQ_T_C_x << J_x*pow(torque_dob_fc,2), 				0.0;
 	MinvQ_T_C_y << J_y*pow(torque_dob_fc,2), 				0.0;
+	MinvQ_T_C_z << J_z*pow(torque_dob_fc,2), 				0.0;
 
 	//Set Control Matrix----------------------------------------
 		setCM();
@@ -842,7 +850,7 @@ int main(int argc, char **argv){
 	sine_wave_data = nh.advertise<geometry_msgs::Vector3>("sine_wave",100);
 	disturbance = nh.advertise<geometry_msgs::Vector3>("att_dhat",100);
 	linear_acceleration = nh.advertise<geometry_msgs::Vector3>("imu_lin_acl",100);
-	//External_force_data = nh.advertise<geometry_msgs::Vector3>("external_force",100);
+	///External_force_data = nh.advertise<geometry_msgs::Vector3>("external_force",1);
 	reference_desired_pos_error = nh.advertise<geometry_msgs::Vector3>("pos_e",100);
 	reference_pos = nh.advertise<geometry_msgs::Vector3>("pos_r",100);
 	mass_pub = nh.advertise<std_msgs::Float32>("mass",1);
@@ -858,10 +866,10 @@ int main(int argc, char **argv){
 	ros::Subscriber t265_pos=nh.subscribe("/t265_pos",100,posCallback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber t265_rot=nh.subscribe("/t265_rot",100,rotCallback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber t265_odom=nh.subscribe("/rs_t265/odom/sample",100,t265OdomCallback,ros::TransportHints().tcpNoDelay());
-	ros::Subscriber external_force_sub=nh.subscribe("/external_force",1,external_force_Callback,ros::TransportHints().tcpNoDelay());
-	ros::Subscriber external_torque_sub=nh.subscribe("/external_torque",1,external_torque_Callback,ros::TransportHints().tcpNoDelay());
-	ros::Subscriber adaptive_external_force_sub=nh.subscribe("/adaptive_external_force",1,adaptive_external_force_Callback,ros::TransportHints().tcpNoDelay());
-	ros::Subscriber adaptive_external_torque_sub=nh.subscribe("/adaptvie_external_torque",1,adaptive_external_torque_Callback,ros::TransportHints().tcpNoDelay());	
+	//ros::Subscriber external_force_sub=nh.subscribe("/external_force",1,external_force_Callback,ros::TransportHints().tcpNoDelay());
+	//ros::Subscriber external_torque_sub=nh.subscribe("/external_torque",1,external_torque_Callback,ros::TransportHints().tcpNoDelay());
+	//ros::Subscriber adaptive_external_force_sub=nh.subscribe("/adaptive_external_force",1,adaptive_external_force_Callback,ros::TransportHints().tcpNoDelay());
+	//ros::Subscriber adaptive_external_torque_sub=nh.subscribe("/adaptvie_external_torque",1,adaptive_external_torque_Callback,ros::TransportHints().tcpNoDelay());	
 	
 	
 	
@@ -922,8 +930,8 @@ void publisherSet(){
 		//pwm_Command(Sbus[2],Sbus[2],Sbus[2],Sbus[2],Sbus[2],Sbus[2],Sbus[2],Sbus[2]);
 		//pwm_Command(1000,1000,1000,Sbus[2],1000,1000,1000,1000);
 
-		rpyT_ctrl();
-		//pwm_Arm();		
+		//rpyT_ctrl();
+		pwm_Arm();		
 	
 		//ROS_INFO("Arm mode");	
 	}
@@ -1061,9 +1069,10 @@ void rpyT_ctrl() {
 
 	if(DOB_mode){
 
-		//disturbance_Observer();
-		force_dob();
+		disturbance_Observer();
+//		force_dob();
 		torque_dob();
+	//	admittance_controller();
 	//`	position_dob();
 	//	ROS_INFO("DOB mode");	
 
@@ -1192,8 +1201,9 @@ void rpyT_ctrl() {
 	//torque_dob();
 	tautilde_r_d = tau_r_d- dhat_tau_r;//dhat_r;// - dhat_tau_r; 
 	tautilde_p_d = tau_p_d- dhat_tau_p;//dhat_p;// - dhat_tau_p;
+	tautilde_y_d = tau_y_d- dhat_tau_y;//dhat_p;// - dhat_tau_p;
 	//u << tau_r_d, tau_p_d, tau_y_d, F_zd;
-	u << tautilde_r_d, tautilde_p_d, tau_y_d, F_zd;
+	u << tautilde_r_d, tautilde_p_d, tautilde_y_d, F_zd;
 	torque_d.x = tau_r_d;
 	torque_d.y = tau_p_d;
 	torque_d.z = tau_y_d;
@@ -1476,7 +1486,7 @@ void t265OdomCallback(const nav_msgs::Odometry::ConstPtr& msg){
 	//ROS_INFO("Linear_velocity - [x: %f  y: %f  z:%f]",cam_v(0),cam_v(1),cam_v(2));
 	//ROS_INFO("Angular_velocity - [x: %f  y: %f  z:%f]",w(0),w(1),w(2));
 }
-void external_force_Callback(const geometry_msgs::Vector3& msg){
+/*void external_force_Callback(const geometry_msgs::Vector3& msg){
 	external_force=msg;
 
 	non_bias_external_force.x=external_force.x-F_ex_bias;
@@ -1498,7 +1508,7 @@ void adaptive_external_force_Callback(const geometry_msgs::Vector3& msg){
 
 void adaptive_external_torque_Callback(const geometry_msgs::Vector3& msg){
 	adaptive_external_torque=msg;
-}
+}*/
 
 int32_t pwmMapping(double pwm){
 	return (int32_t)(65535.*pwm/(1./pwm_freq*1000000.));
@@ -1583,10 +1593,10 @@ void pwm_Arm(){
 	PWMs_cmd.data[2] = 1500;
 	PWMs_cmd.data[3] = 1500;
 	PWMs_val.data.resize(16);
-	PWMs_val.data[0] = pwmMapping(2200.);
-	PWMs_val.data[1] = pwmMapping(2200.);
-	PWMs_val.data[2] = pwmMapping(2200.);
-	PWMs_val.data[3] = pwmMapping(2200.);
+	PWMs_val.data[0] = pwmMapping(2000.);
+	PWMs_val.data[1] = pwmMapping(2000.);
+	PWMs_val.data[2] = pwmMapping(2000.);
+	PWMs_val.data[3] = pwmMapping(2000.);
 	PWMs_val.data[4] = -1;
 	PWMs_val.data[5] = -1;
 	PWMs_val.data[6] = -1;
@@ -1806,17 +1816,20 @@ void Rotation_matrix(){
 }*/
 
 void admittance_controller(){
-	if(fabs(adaptive_external_force.x)<external_force_deadzone) adaptive_external_force.x=0;
+	/*if(fabs(adaptive_external_force.x)<external_force_deadzone) adaptive_external_force.x=0;
 	if(fabs(adaptive_external_force.y)<external_force_deadzone) adaptive_external_force.y=0;	
-	if(fabs(adaptive_external_force.z)<external_force_deadzone) adaptive_external_force.z=0;	
+	if(fabs(adaptive_external_force.z)<external_force_deadzone) adaptive_external_force.z=0;*/	
 	
-	X_e_x1_dot=-D/M*X_e_x1-K/M*X_e_x2+adaptive_external_force.x;
+	if(fabs(force_dhat.x)<external_force_deadzone) external_force.x=0;
+	if(fabs(force_dhat.y)<external_force_deadzone) external_force.y=0;	
+	if(fabs(force_dhat.z)<external_force_deadzone) external_force.z=0;	
+	X_e_x1_dot=-D/M*X_e_x1-K/M*X_e_x2+external_force.x;
 	X_e_x2_dot=X_e_x1;
 	X_e_x1+=X_e_x1_dot*delta_t.count();
 	X_e_x2+=X_e_x2_dot*delta_t.count();
 	X_e=-1.0/M*X_e_x2;
 	
-	Y_e_x1_dot=-D/M*Y_e_x1-K/M*X_e_x2+adaptive_external_force.y;
+	Y_e_x1_dot=-D/M*Y_e_x1-K/M*X_e_x2+external_force.y;
 	Y_e_x2_dot=Y_e_x1;
 	Y_e_x1+=Y_e_x1_dot*delta_t.count();
 	Y_e_x2+=Y_e_x2_dot*delta_t.count();
@@ -1938,6 +1951,16 @@ void torque_dob(){
 
 	dhat_tau_p=(MinvQ_T_Y_y(0)-Q_T_Y_y(0));
 
+	MinvQ_T_Z_x_dot=MinvQ_T_A*MinvQ_T_Z_x+MinvQ_T_B*imu_ang_vel.z;
+	MinvQ_T_Z_x+=MinvQ_T_Z_x_dot*delta_t.count();
+	MinvQ_T_Z_y=MinvQ_T_C_z*MinvQ_T_Z_x;
+	
+	Q_T_Z_x_dot=Q_T_A*Q_T_Z_x+Q_T_B*tautilde_y_d;
+	Q_T_Z_x+=Q_T_Z_x_dot*delta_t.count();
+	Q_T_Z_y=Q_T_C*Q_T_Z_x;
+
+	dhat_tau_y=(MinvQ_T_Z_y(0)-Q_T_Z_y(0));
+	
 	torque_dhat.x=dhat_tau_r;
 	torque_dhat.y=dhat_tau_p;
 	torque_dhat.z=dhat_tau_y;
