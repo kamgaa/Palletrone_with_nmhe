@@ -209,7 +209,7 @@ double Y_e_x2_dot=0;
 double M=0.5;
 double D=20.0;
 double K=0;
-double external_force_deadzone=3.5; //N
+double external_force_deadzone=4.0; //N
 
 //Force estimation lpf
 double Fe_x_x_dot = 0;
@@ -456,13 +456,13 @@ double Z_tilde_r = 0;
 void position_dob();
 
 void force_dob();
-double force_dob_fc=3.0;
+double force_dob_fc=1.5;
 double force_dob_m = 8.0;
 double dhat_F_X = .0;
 double dhat_F_Y = .0;
 double dhat_F_Z = .0;
 
-double torque_dob_fc=5.0;
+double torque_dob_fc=4.7;
 double dhat_tau_r = 0;
 double dhat_tau_p = 0;
 double dhat_tau_y = 0;
@@ -930,8 +930,8 @@ void publisherSet(){
 		//pwm_Command(Sbus[2],Sbus[2],Sbus[2],Sbus[2],Sbus[2],Sbus[2],Sbus[2],Sbus[2]);
 		//pwm_Command(1000,1000,1000,Sbus[2],1000,1000,1000,1000);
 
-		//rpyT_ctrl();
-		pwm_Arm();		
+		rpyT_ctrl();
+		//pwm_Arm();		
 	
 		//ROS_INFO("Arm mode");	
 	}
@@ -1067,18 +1067,20 @@ void rpyT_ctrl() {
 			//ROS_INFO("Manual Thrust!!");
 	}
 
-	if(DOB_mode){
+		force_dob();
+	/*if(DOB_mode){
 
-		disturbance_Observer();
-//		force_dob();
+//		disturbance_Observer();
+		force_dob();
 		torque_dob();
 	//	admittance_controller();
 	//`	position_dob();
 	//	ROS_INFO("DOB mode");	
 
-	}
+	}*/
 
 	if(position_mode || velocity_mode){
+		torque_dob();
 		if(position_mode){
 			
 			X_d = X_d_base - XY_limit*(((double)Sbus[1]-(double)1500)/(double)500);
@@ -1118,9 +1120,9 @@ void rpyT_ctrl() {
 		
 		if(tilt_mode){
 			
-			X_tilde_ddot_d=X_ddot_d-(dhat_F_X/force_dob_m);
-			Y_tilde_ddot_d=Y_ddot_d-(dhat_F_Y/force_dob_m);
-			Z_tilde_ddot_d=Z_ddot_d-(dhat_F_Z/force_dob_m);
+			X_tilde_ddot_d=X_ddot_d;//-(dhat_F_X/force_dob_m);
+			Y_tilde_ddot_d=Y_ddot_d;//-(dhat_F_Y/force_dob_m);
+			Z_tilde_ddot_d=Z_ddot_d;//-(dhat_F_Z/force_dob_m);
 			r_d = 0.0;
 			p_d = 0.0;
 			F_xd = mass*(X_tilde_ddot_d*cos(imu_rpy.z)*cos(imu_rpy.y)+Y_tilde_ddot_d*sin(imu_rpy.z)*cos(imu_rpy.y)-(Z_tilde_ddot_d)*sin(imu_rpy.y));
@@ -1201,15 +1203,25 @@ void rpyT_ctrl() {
 	//torque_dob();
 	tautilde_r_d = tau_r_d- dhat_tau_r;//dhat_r;// - dhat_tau_r; 
 	tautilde_p_d = tau_p_d- dhat_tau_p;//dhat_p;// - dhat_tau_p;
-	tautilde_y_d = tau_y_d- dhat_tau_y;//dhat_p;// - dhat_tau_p;
+	tautilde_y_d = tau_y_d;//- dhat_tau_y;//dhat_p;// - dhat_tau_p;
 	//u << tau_r_d, tau_p_d, tau_y_d, F_zd;
 	u << tautilde_r_d, tautilde_p_d, tautilde_y_d, F_zd;
 	torque_d.x = tau_r_d;
 	torque_d.y = tau_p_d;
 	torque_d.z = tau_y_d;
-	force_d.x = F_xd;
-	force_d.y = F_yd;
-	force_d.z = F_zd;
+	if(admittance_mode)
+	{
+		admittance_controller();
+		F_xd = F_xd - dhat_F_X;
+		F_yd = F_yd - dhat_F_Y;
+		//F_zd = F_zd - dhat_F_Z;
+	}
+	/*else{
+		ROS_INFO("OFFFFFFFF");
+	}*/
+	force_d.x = F_xd - dhat_F_X;
+	force_d.y = F_yd- dhat_F_Y;
+	force_d.z = F_zd-dhat_F_Z;
 
 	
 //	u << tau_r_d, tau_p_d, tau_y_d, F_zd;
@@ -1412,11 +1424,11 @@ void sbusCallback(const std_msgs::Int16MultiArray::ConstPtr& array){
 		position_mode=true;
 	}
 
-	if(Sbus[7]>1500) DOB_mode=true;
-	else DOB_mode=false;
+	/*if(Sbus[7]>1500) DOB_mode=true;
+	else DOB_mode=false;*/
 
-	if(Sbus[9]>1500) admittance_mode=true;
-	else admittance_mode=true;
+	if(Sbus[7]>1500) admittance_mode=true;
+	else admittance_mode=false;
 //	ROS_INFO("%d, %d, %d, %d, %d, %d, %d, %d",Sbus[0],Sbus[1],Sbus[2],Sbus[3],Sbus[4],Sbus[5],Sbus[6],Sbus[7]);
 	//if(Sbus[9]>1500) ESC_control=true;
 	//else ESC_control=false;
@@ -1593,10 +1605,10 @@ void pwm_Arm(){
 	PWMs_cmd.data[2] = 1500;
 	PWMs_cmd.data[3] = 1500;
 	PWMs_val.data.resize(16);
-	PWMs_val.data[0] = pwmMapping(2000.);
-	PWMs_val.data[1] = pwmMapping(2000.);
-	PWMs_val.data[2] = pwmMapping(2000.);
-	PWMs_val.data[3] = pwmMapping(2000.);
+	PWMs_val.data[0] = pwmMapping(1400.);
+	PWMs_val.data[1] = pwmMapping(1400.);
+	PWMs_val.data[2] = pwmMapping(1400.);
+	PWMs_val.data[3] = pwmMapping(1400.);
 	PWMs_val.data[4] = -1;
 	PWMs_val.data[5] = -1;
 	PWMs_val.data[6] = -1;
@@ -1758,7 +1770,7 @@ void sine_wave_vibration(){
 	time_count += delta_t.count();
 }
 
-void get_Rotation_matrix(){
+/*void get_Rotation_matrix(){
 	Rotz << cos(imu_rpy.z), -sin(imu_rpy.z),   0,
 	        sin(imu_rpy.z),  cos(imu_rpy.z),   0,
 		             0,               0, 1.0;
@@ -1770,8 +1782,8 @@ void get_Rotation_matrix(){
 	Rotx << 1.0,              0,               0,
                   0, cos(imu_rpy.x), -sin(imu_rpy.x),
                   0, sin(imu_rpy.x),  cos(imu_rpy.x);		  
-}
-
+}*/
+/*
 void Rotation_matrix(){
 	RotZ << cos(imu_lin_acc.z), -sin(imu_lin_acc.z),   0,
 	        sin(imu_lin_acc.z),  cos(imu_lin_acc.z),   0,
@@ -1784,6 +1796,20 @@ void Rotation_matrix(){
 	RotX << 1.0,              0,               0,
                   0, cos(imu_lin_acc.x), -sin(imu_lin_acc.x),
                   0, sin(imu_lin_acc.x),  cos(imu_lin_acc.x);		  
+}*/
+
+void get_Rotation_matrix(){
+	Rotz << cos(dhat_F_Z), -sin(dhat_F_Z),   0,
+	        sin(dhat_F_Z),  cos(dhat_F_Z),   0,
+		             0,               0, 1.0;
+
+	Roty << cos(dhat_F_Y),   0, sin(dhat_F_Y),
+	                     0, 1.0,              0,
+	       -sin(dhat_F_Y),   0, cos(dhat_F_Y);
+
+	Rotx << 1.0,              0,               0,
+                  0, cos(dhat_F_X), -sin(dhat_F_X),
+                  0, sin(dhat_F_X),  cos(dhat_F_X);		  
 }
 /*void external_force_estimation(){ 
    //----Estimate the external force in external_wrench_nmhe_node 2023.09.09----
@@ -1819,10 +1845,11 @@ void admittance_controller(){
 	/*if(fabs(adaptive_external_force.x)<external_force_deadzone) adaptive_external_force.x=0;
 	if(fabs(adaptive_external_force.y)<external_force_deadzone) adaptive_external_force.y=0;	
 	if(fabs(adaptive_external_force.z)<external_force_deadzone) adaptive_external_force.z=0;*/	
-	
-	if(fabs(force_dhat.x)<external_force_deadzone) external_force.x=0;
-	if(fabs(force_dhat.y)<external_force_deadzone) external_force.y=0;	
-	if(fabs(force_dhat.z)<external_force_deadzone) external_force.z=0;	
+	get_Rotation_matrix();
+
+	if(fabs(force_d.x)<external_force_deadzone) external_force.x=0;
+	if(fabs(force_d.y)<external_force_deadzone) external_force.y=0;	
+	if(fabs(force_d.z)<external_force_deadzone) external_force.z=0;	
 	X_e_x1_dot=-D/M*X_e_x1-K/M*X_e_x2+external_force.x;
 	X_e_x2_dot=X_e_x1;
 	X_e_x1+=X_e_x1_dot*delta_t.count();
@@ -1893,7 +1920,6 @@ void position_dob(){
 
 
 void force_dob(){
-	//Rotation_matrix();
 	
 	MinvQ_F_X_x_dot=MinvQ_F_A*MinvQ_F_X_x+MinvQ_F_B*imu_lin_acc.x;
 	MinvQ_F_X_x+=MinvQ_F_X_x_dot*delta_t.count();
@@ -1925,9 +1951,9 @@ void force_dob(){
 
 	dhat_F_Z=(MinvQ_F_Z_y(0)-Q_F_Z_y(0));
 
-	force_dhat.x=dhat_F_X;
-	force_dhat.y=dhat_F_Y;
-	force_dhat.z=dhat_F_Z;	
+	external_force.x=dhat_F_X;
+	external_force.y=dhat_F_Y;
+	external_force.z=dhat_F_Z;	
 }
 
 void torque_dob(){
