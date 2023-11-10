@@ -1086,8 +1086,8 @@ void rpyT_ctrl() {
 			X_d = X_d_base - XY_limit*(((double)Sbus[1]-(double)1500)/(double)500);
 			Y_d = Y_d_base + XY_limit*(((double)Sbus[3]-(double)1500)/(double)500);
 		
-			e_X = X_d - pos.x;// X_r-pos.x;
-			e_Y = Y_d - pos.y;// Y_r-pos.y; #2023.08.17 update
+			e_X = X_r - pos.x;// X_d-pos.x;
+			e_Y = Y_r - pos.y;// Y_d-pos.y; #2023.11.10 update
 			e_X_i += e_X * delta_t.count();
 			if (fabs(e_X_i) > pos_integ_limit) e_X_i = (e_X_i / fabs(e_X_i)) * pos_integ_limit;
 			e_Y_i += e_Y * delta_t.count();
@@ -1770,7 +1770,7 @@ void sine_wave_vibration(){
 	time_count += delta_t.count();
 }
 
-/*void get_Rotation_matrix(){
+void get_Rotation_matrix(){
 	Rotz << cos(imu_rpy.z), -sin(imu_rpy.z),   0,
 	        sin(imu_rpy.z),  cos(imu_rpy.z),   0,
 		             0,               0, 1.0;
@@ -1782,34 +1782,6 @@ void sine_wave_vibration(){
 	Rotx << 1.0,              0,               0,
                   0, cos(imu_rpy.x), -sin(imu_rpy.x),
                   0, sin(imu_rpy.x),  cos(imu_rpy.x);		  
-}*/
-/*
-void Rotation_matrix(){
-	RotZ << cos(imu_lin_acc.z), -sin(imu_lin_acc.z),   0,
-	        sin(imu_lin_acc.z),  cos(imu_lin_acc.z),   0,
-		             0,               0, 1.0;
-
-	RotY << cos(imu_lin_acc.y),   0, sin(imu_lin_acc.y),
-	                     0, 1.0,              0,
-	       -sin(imu_lin_acc.y),   0, cos(imu_lin_acc.y);
-
-	RotX << 1.0,              0,               0,
-                  0, cos(imu_lin_acc.x), -sin(imu_lin_acc.x),
-                  0, sin(imu_lin_acc.x),  cos(imu_lin_acc.x);		  
-}*/
-
-void get_Rotation_matrix(){
-	Rotz << cos(dhat_F_Z), -sin(dhat_F_Z),   0,
-	        sin(dhat_F_Z),  cos(dhat_F_Z),   0,
-		             0,               0, 1.0;
-
-	Roty << cos(dhat_F_Y),   0, sin(dhat_F_Y),
-	                     0, 1.0,              0,
-	       -sin(dhat_F_Y),   0, cos(dhat_F_Y);
-
-	Rotx << 1.0,              0,               0,
-                  0, cos(dhat_F_X), -sin(dhat_F_X),
-                  0, sin(dhat_F_X),  cos(dhat_F_X);		  
 }
 /*void external_force_estimation(){ 
    //----Estimate the external force in external_wrench_nmhe_node 2023.09.09----
@@ -1847,9 +1819,19 @@ void admittance_controller(){
 	if(fabs(adaptive_external_force.z)<external_force_deadzone) adaptive_external_force.z=0;*/	
 	get_Rotation_matrix();
 
-	if(fabs(force_d.x)<external_force_deadzone) external_force.x=0;
-	if(fabs(force_d.y)<external_force_deadzone) external_force.y=0;	
-	if(fabs(force_d.z)<external_force_deadzone) external_force.z=0;	
+	if(fabs(force_d.x)<external_force_deadzone) dhat_F_X=0;
+	if(fabs(force_d.y)<external_force_deadzone) dhat_F_Y=0;	
+	if(fabs(force_d.z)<external_force_deadzone) dhat_F_Z=0;	
+	external_force.x = dhat_F_X;
+	external_force.y = dhat_F_Y;
+	external_force.z = dhat_F_Z;
+
+	Eigen::Vector3d Fe;
+	Eigen::Vector3d Fe_for_rotM;
+
+	Fe_for_rotM << external_force.x, external_force.y, external_force.z; 
+	Fe =  Rotz*Roty*Rotz*Fe_for_rotM;
+	
 	X_e_x1_dot=-D/M*X_e_x1-K/M*X_e_x2+external_force.x;
 	X_e_x2_dot=X_e_x1;
 	X_e_x1+=X_e_x1_dot*delta_t.count();
@@ -1862,8 +1844,8 @@ void admittance_controller(){
 	Y_e_x2+=Y_e_x2_dot*delta_t.count();
 	Y_e=-1.0/M*Y_e_x2;
 	
-	X_r=X_d;
-	Y_r=Y_d;
+	X_r=X_d-X_e;
+	Y_r=Y_d-Y_e;
 	Z_r=Z_d;
 
 	reference_position.x=X_r;
