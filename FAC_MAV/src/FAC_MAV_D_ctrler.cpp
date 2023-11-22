@@ -50,10 +50,10 @@
 #include "FAC_MAV/PosCtrlService.h" //ASDF
 #include "FAC_MAV/HoverService.h" //ASDF
 #include "FAC_MAV/FAC_HoverService.h" //ASDF
-//-----For CasADi-----//
+// //-----For CasADi-----//
 // #include <casadi/casadi.hpp>
 // #include "DoubleLinkedList.h"
-#include <algorithm>
+// #include <algorithm>
 //--------------------//
 #include "nav_msgs/Odometry.h"
 
@@ -123,7 +123,7 @@ bool altitude_mode = false;
 bool tilt_mode = false;
 bool ESC_control = false;
 bool admittance_mode = false;
-bool DOB_mode = false;
+bool DOB_mode = true;
 //Thruster_cmd
 double F1 = 0;//desired propeller 1 force
 double F2 = 0;//desired propeller 2 force
@@ -209,7 +209,7 @@ double Y_e_x2_dot=0;
 double M=0.5;
 double D=20.0;
 double K=0;
-double external_force_deadzone=3.5; //N
+double external_force_deadzone=4.0; //N
 
 //Force estimation lpf
 double Fe_x_x_dot = 0;
@@ -443,7 +443,8 @@ void get_Rotation_matrix();
 void Rotation_matrix();
 void external_force_estimation();
 void admittance_controller();
-void joystickCallback(const geometry_msgs::Twist &msg);
+void joystickCallback(const geometry_msgs::Twist &msg); //Dasom
+
 
 double position_dob_fc=0.1;
 double position_dob_m=8.0;
@@ -457,13 +458,13 @@ double Z_tilde_r = 0;
 void position_dob();
 
 void force_dob();
-double force_dob_fc=3.0;
+double force_dob_fc=1.5;
 double force_dob_m = 8.0;
 double dhat_F_X = .0;
 double dhat_F_Y = .0;
 double dhat_F_Z = .0;
 
-double torque_dob_fc=5.0;
+double torque_dob_fc=4.7;
 double dhat_tau_r = 0;
 double dhat_tau_p = 0;
 double dhat_tau_y = 0;
@@ -618,10 +619,10 @@ double Z_tilde_ddot_d=0.0;
 
 
 //-----------------------------------------------------
-//추가ASDF-------------------------------------------------
+//Dasom-------------------------------------------------
 bool position_joystick_control = false; //false: 조종기가 xy 포지션 커맨드 줌. true: 조이스틱이 xy 포지션 커맨드 줌
-Eigen::Vector3d haptic_command; // /phantom/xyzrpy/palletrone
-double haptic_command_velocity = 0.15; // [m/s]
+Eigen::Vector3d haptic_command; // /phantom/xyzrpy
+double haptic_command_velocity = 0.03; // [m/s]
 double X_position_command_temp;  //모드 변경하는 순간의 커맨드 포지션 -> 안 썼음
 double Y_position_command_temp;  //모드 변경하는 순간의 커맨드 포지션 -> 안 썼음
 //-----------------------------------------------------
@@ -877,7 +878,8 @@ int main(int argc, char **argv){
 	ros::Subscriber t265_pos=nh.subscribe("/t265_pos",100,posCallback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber t265_rot=nh.subscribe("/t265_rot",100,rotCallback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber t265_odom=nh.subscribe("/rs_t265/odom/sample",100,t265OdomCallback,ros::TransportHints().tcpNoDelay());
-	ros::Subscriber joystick_sub_ = nh.subscribe("/phantom/xyzrpy/palletrone", 10, joystickCallback, ros::TransportHints().tcpNoDelay());
+	ros::Subscriber joystick_sub_ = nh.subscribe("/phantom/xyzrpy/palletrone", 10, joystickCallback, ros::TransportHints().tcpNoDelay()); // Dasom
+
 	//ros::Subscriber external_force_sub=nh.subscribe("/external_force",1,external_force_Callback,ros::TransportHints().tcpNoDelay());
 	//ros::Subscriber external_torque_sub=nh.subscribe("/external_torque",1,external_torque_Callback,ros::TransportHints().tcpNoDelay());
 	//ros::Subscriber adaptive_external_force_sub=nh.subscribe("/adaptive_external_force",1,adaptive_external_force_Callback,ros::TransportHints().tcpNoDelay());
@@ -1079,19 +1081,21 @@ void rpyT_ctrl() {
 			//ROS_INFO("Manual Thrust!!");
 	}
 
-	if(DOB_mode){
+		force_dob();
+	/*if(DOB_mode){
 
-		disturbance_Observer();
-//		force_dob();
+//		disturbance_Observer();
+		force_dob();
 		torque_dob();
 	//	admittance_controller();
 	//`	position_dob();
 	//	ROS_INFO("DOB mode");	
 
-	}
+	}*/
 
-	if(position_mode || velocity_mode){ //ASDF
-		if(position_mode){
+	if(position_mode || velocity_mode){
+		torque_dob();
+		if(position_mode){ // Dasom
 			if(!position_joystick_control) // joystick control mode가 아닐 때(gimbaling or gimabling + command)
 			{
 				X_d = X_d_base - XY_limit*(((double)Sbus[1]-(double)1500)/(double)500); // 이걸 바꾼다 // Sbus에서 들어오는 신호 값에 따라 부호가 다르다
@@ -1109,12 +1113,17 @@ void rpyT_ctrl() {
 				Y_d = Y_d + haptic_command_velocity*haptic_command[1]*delta_t.count(); // haptic에서 들어오는 cmd를 normalize해 줌
 				X_d_base = X_d; // 현재 drone의 위치를 새로운 base 좌표계로 지정
 				Y_d_base = Y_d; // 현재 drone의 위치를 새로운 base 좌표계로 지정
+
+ROS_INFO("haptic_command_velocity = %lf", haptic_command_velocity);
+ROS_INFO("haptic_command[0] = %lf", haptic_command[0]);
+ROS_INFO("haptic_command[1] = %lf", haptic_command[1]);
+ROS_INFO("result = %lf", haptic_command_velocity*haptic_command[0]*delta_t.count());
 			
 				ROS_WARN("JoYStIcK MOdE :) ");
 			}
-
-			e_X = X_d - pos.x;// X_r-pos.x;
-			e_Y = Y_d - pos.y;// Y_r-pos.y; #2023.08.17 update
+			// ROS_ERROR("X_d, Y_d = %lf, %lf", X_d, Y_d);	
+			e_X = X_d - pos.x;// X_d-pos.x;
+			e_Y = Y_d - pos.y;// Y_d-pos.y; #2023.11.10 update
 			e_X_i += e_X * delta_t.count();
 			if (fabs(e_X_i) > pos_integ_limit) e_X_i = (e_X_i / fabs(e_X_i)) * pos_integ_limit;
 			e_Y_i += e_Y * delta_t.count();
@@ -1147,9 +1156,9 @@ void rpyT_ctrl() {
 		
 		if(tilt_mode){
 			
-			X_tilde_ddot_d=X_ddot_d-(dhat_F_X/force_dob_m);
-			Y_tilde_ddot_d=Y_ddot_d-(dhat_F_Y/force_dob_m);
-			Z_tilde_ddot_d=Z_ddot_d-(dhat_F_Z/force_dob_m);
+			X_tilde_ddot_d=X_ddot_d;//-(dhat_F_X/force_dob_m);
+			Y_tilde_ddot_d=Y_ddot_d;//-(dhat_F_Y/force_dob_m);
+			Z_tilde_ddot_d=Z_ddot_d;//-(dhat_F_Z/force_dob_m);
 			r_d = 0.0;
 			p_d = 0.0;
 			F_xd = mass*(X_tilde_ddot_d*cos(imu_rpy.z)*cos(imu_rpy.y)+Y_tilde_ddot_d*sin(imu_rpy.z)*cos(imu_rpy.y)-(Z_tilde_ddot_d)*sin(imu_rpy.y));
@@ -1230,15 +1239,25 @@ void rpyT_ctrl() {
 	//torque_dob();
 	tautilde_r_d = tau_r_d- dhat_tau_r;//dhat_r;// - dhat_tau_r; 
 	tautilde_p_d = tau_p_d- dhat_tau_p;//dhat_p;// - dhat_tau_p;
-	tautilde_y_d = tau_y_d- dhat_tau_y;//dhat_p;// - dhat_tau_p;
+	tautilde_y_d = tau_y_d;//- dhat_tau_y;//dhat_p;// - dhat_tau_p;
 	//u << tau_r_d, tau_p_d, tau_y_d, F_zd;
 	u << tautilde_r_d, tautilde_p_d, tautilde_y_d, F_zd;
 	torque_d.x = tau_r_d;
 	torque_d.y = tau_p_d;
 	torque_d.z = tau_y_d;
-	force_d.x = F_xd;
-	force_d.y = F_yd;
-	force_d.z = F_zd;
+	if(admittance_mode)
+	{
+		admittance_controller();
+		F_xd = F_xd - dhat_F_X;
+		F_yd = F_yd - dhat_F_Y;
+		//F_zd = F_zd - dhat_F_Z;
+	}
+	/*else{
+		ROS_INFO("OFFFFFFFF");
+	}*/
+	force_d.x = F_xd - dhat_F_X;
+	force_d.y = F_yd- dhat_F_Y;
+	force_d.z = F_zd-dhat_F_Z;
 
 	
 //	u << tau_r_d, tau_p_d, tau_y_d, F_zd;
@@ -1332,7 +1351,7 @@ double Force_to_PWM(double F) {
 		// ROS_INFO("%lf",pwm);
 	}
 	else pwm = 1100.;
-	if (pwm > 1900)	pwm = 1900;
+	if (pwm > 1950)	pwm = 1950;
 	if(pwm < 1100) pwm = 1100;
 	/*if(altitude_mode){//altitude mode
 		if(Z_d_base<=0){
@@ -1441,16 +1460,11 @@ void sbusCallback(const std_msgs::Int16MultiArray::ConstPtr& array){
 		position_mode=true;
 	}
 
-	if(Sbus[7]>1500) 
-		{
-		position_joystick_control=true;
-		}
-	else 
-		{
-		position_joystick_control=false;
-		}
-	if(Sbus[9]>1500) admittance_mode=true;
-	else admittance_mode=true;
+	if(Sbus[7]>1500) position_joystick_control = true;
+	else position_joystick_control = false;
+
+	// if(Sbus[7]>1500) admittance_mode=true;
+	// else admittance_mode=false;
 //	ROS_INFO("%d, %d, %d, %d, %d, %d, %d, %d",Sbus[0],Sbus[1],Sbus[2],Sbus[3],Sbus[4],Sbus[5],Sbus[6],Sbus[7]);
 	//if(Sbus[9]>1500) ESC_control=true;
 	//else ESC_control=false;
@@ -1627,10 +1641,10 @@ void pwm_Arm(){
 	PWMs_cmd.data[2] = 1500;
 	PWMs_cmd.data[3] = 1500;
 	PWMs_val.data.resize(16);
-	PWMs_val.data[0] = pwmMapping(2000.);
-	PWMs_val.data[1] = pwmMapping(2000.);
-	PWMs_val.data[2] = pwmMapping(2000.);
-	PWMs_val.data[3] = pwmMapping(2000.);
+	PWMs_val.data[0] = pwmMapping(1400.);
+	PWMs_val.data[1] = pwmMapping(1400.);
+	PWMs_val.data[2] = pwmMapping(1400.);
+	PWMs_val.data[3] = pwmMapping(1400.);
 	PWMs_val.data[4] = -1;
 	PWMs_val.data[5] = -1;
 	PWMs_val.data[6] = -1;
@@ -1805,20 +1819,6 @@ void get_Rotation_matrix(){
                   0, cos(imu_rpy.x), -sin(imu_rpy.x),
                   0, sin(imu_rpy.x),  cos(imu_rpy.x);		  
 }
-
-void Rotation_matrix(){
-	RotZ << cos(imu_lin_acc.z), -sin(imu_lin_acc.z),   0,
-	        sin(imu_lin_acc.z),  cos(imu_lin_acc.z),   0,
-		             0,               0, 1.0;
-
-	RotY << cos(imu_lin_acc.y),   0, sin(imu_lin_acc.y),
-	                     0, 1.0,              0,
-	       -sin(imu_lin_acc.y),   0, cos(imu_lin_acc.y);
-
-	RotX << 1.0,              0,               0,
-                  0, cos(imu_lin_acc.x), -sin(imu_lin_acc.x),
-                  0, sin(imu_lin_acc.x),  cos(imu_lin_acc.x);		  
-}
 /*void external_force_estimation(){ 
    //----Estimate the external force in external_wrench_nmhe_node 2023.09.09----
 	get_Rotation_matrix();
@@ -1853,10 +1853,21 @@ void admittance_controller(){
 	/*if(fabs(adaptive_external_force.x)<external_force_deadzone) adaptive_external_force.x=0;
 	if(fabs(adaptive_external_force.y)<external_force_deadzone) adaptive_external_force.y=0;	
 	if(fabs(adaptive_external_force.z)<external_force_deadzone) adaptive_external_force.z=0;*/	
+	get_Rotation_matrix();
+
+	if(fabs(force_d.x)<external_force_deadzone) dhat_F_X=0;
+	if(fabs(force_d.y)<external_force_deadzone) dhat_F_Y=0;	
+	if(fabs(force_d.z)<external_force_deadzone) dhat_F_Z=0;	
+	external_force.x = dhat_F_X;
+	external_force.y = dhat_F_Y;
+	external_force.z = dhat_F_Z;
+
+	Eigen::Vector3d Fe;
+	Eigen::Vector3d Fe_for_rotM;
+
+	Fe_for_rotM << external_force.x, external_force.y, external_force.z; 
+	Fe =  Rotz*Roty*Rotz*Fe_for_rotM;
 	
-	if(fabs(force_dhat.x)<external_force_deadzone) external_force.x=0;
-	if(fabs(force_dhat.y)<external_force_deadzone) external_force.y=0;	
-	if(fabs(force_dhat.z)<external_force_deadzone) external_force.z=0;	
 	X_e_x1_dot=-D/M*X_e_x1-K/M*X_e_x2+external_force.x;
 	X_e_x2_dot=X_e_x1;
 	X_e_x1+=X_e_x1_dot*delta_t.count();
@@ -1869,8 +1880,8 @@ void admittance_controller(){
 	Y_e_x2+=Y_e_x2_dot*delta_t.count();
 	Y_e=-1.0/M*Y_e_x2;
 	
-	X_r=X_d;
-	Y_r=Y_d;
+	X_r=X_d-X_e;
+	Y_r=Y_d-Y_e;
 	Z_r=Z_d;
 
 	reference_position.x=X_r;
@@ -1927,7 +1938,6 @@ void position_dob(){
 
 
 void force_dob(){
-	//Rotation_matrix();
 	
 	MinvQ_F_X_x_dot=MinvQ_F_A*MinvQ_F_X_x+MinvQ_F_B*imu_lin_acc.x;
 	MinvQ_F_X_x+=MinvQ_F_X_x_dot*delta_t.count();
@@ -1959,9 +1969,9 @@ void force_dob(){
 
 	dhat_F_Z=(MinvQ_F_Z_y(0)-Q_F_Z_y(0));
 
-	force_dhat.x=dhat_F_X;
-	force_dhat.y=dhat_F_Y;
-	force_dhat.z=dhat_F_Z;	
+	external_force.x=dhat_F_X;
+	external_force.y=dhat_F_Y;
+	external_force.z=dhat_F_Z;	
 }
 
 void torque_dob(){
@@ -2034,7 +2044,7 @@ void mass_update()
 
 }
 
-void joystickCallback(const geometry_msgs::Twist &msg) //추가바
+void joystickCallback(const geometry_msgs::Twist &msg) //Dasom
 {
 	haptic_command[0] = msg.linear.x; // 대략 -0.2 ~ 0.2
 	haptic_command[1] = msg.linear.y; // 대략 -0.15 ~ 0

@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf2
   tf2_ros
+  ## dasom_bag
 )
 
 ## System dependencies are found with CMake's conventions
@@ -120,7 +121,7 @@ generate_messages(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES FAC_MAV
-  CATKIN_DEPENDS roscpp std_msgs message_runtime
+  CATKIN_DEPENDS roscpp std_msgs message_runtime #dasom_bag
   DEPENDS system_lib
   DEPENDS Eigen
 )

@@ -136,6 +136,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(data_logging src/data_logging.cpp)
+add_executable(dasom_data_logging src/dasom_data_logging.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -146,12 +147,15 @@ add_executable(data_logging src/data_logging.cpp)
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 add_dependencies(data_logging ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(dasom_data_logging ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(data_logging
    ${catkin_LIBRARIES}
  )
-
+target_link_libraries(dasom_data_logging
+   ${catkin_LIBRARIES}
+ )
 #############
 ## Install ##
 #############

@@ -195,9 +195,11 @@ int yaw_rotate_count = 0;
 double X_e = 0;
 double Y_e = 0;
 double Z_e = 0;
+double T_e = 0;
 double X_r = 0;
 double Y_r = 0;
 double Z_r = 0;
+double T_y_r = 0;
 double X_e_x1=0;
 double X_e_x2=0;
 double X_e_x1_dot=0;
@@ -206,10 +208,20 @@ double Y_e_x1=0;
 double Y_e_x2=0;
 double Y_e_x1_dot=0;
 double Y_e_x2_dot=0;
+
+double T_e_x1=0;
+double T_e_x2=0;
+double T_e_x1_dot=0;
+double T_e_x2_dot=0;
+
 double M=0.5;
 double D=20.0;
 double K=0;
+double M_t=0.5;
+double D_t=20.0;
+double K_t=0;
 double external_force_deadzone=4.0; //N
+double external_torque_deadzone=0.3; //N
 
 //Force estimation lpf
 double Fe_x_x_dot = 0;
@@ -256,7 +268,7 @@ static double XYZ_ddot_limit=2;
 static double alpha_beta_limit=1;
 static double hardware_servo_limit=0.3;
 static double servo_command_limit = 0.3;
-static double tau_y_limit = 0.75; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
+static double tau_y_limit = 0.25; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
 static double tau_y_th_limit = 0.5; //2023.08.17 update
 double tau_y_th = 0.0; //2023.08.17 update
 
@@ -340,7 +352,7 @@ double fq_cutoff=0.1;//Q filter Cut-off frequency
 // Nominal MoI
 double J_x = 0.002;
 double J_y = 0.002;
-double J_z = 0.1;
+double J_z = 0.02;
 
 //Roll DOB
 double x_r1=0;
@@ -454,7 +466,8 @@ double X_tilde_r = 0;
 double Y_tilde_r = 0;
 double Z_tilde_r = 0;
 void position_dob();
-
+void force_bandpass_filter();
+geometry_msgs::Vector3 filtered_force_dhat;
 void force_dob();
 double force_dob_fc=1.5;
 double force_dob_m = 8.0;
@@ -570,29 +583,30 @@ double z_c_limit = 0.1;
 
 //Bandpass filter parameter
 double Q_factor=10;
-double pass_freq1=5.0;
-double pass_freq2=5.0;
+double pass_freq_x=5.0;
+double pass_freq_y=5.0;
+double pass_freq_z=5.0;
 
-//Filter1
-double x_11=0;
-double x_12=0;
-double x_dot_11=0;
-double x_dot_12=0;
-double y_11=0;
+//Filter X 
+double X_x_1=0;
+double X_x_2=0;
+double X_x_1_dot=0;
+double X_x_2_dot=0;
+double Y_x=0;
 
-//Filter2
-double x_21=0;
-double x_22=0;
-double x_dot_21=0;
-double x_dot_22=0;
-double y_21=0;
+//Filter Y 
+double X_y_1=0;
+double X_y_2=0;
+double X_y_1_dot=0;
+double X_y_2_dot=0;
+double Y_y=0;
 
-//Filter3
-double x_31=0;
-double x_32=0;
-double x_dot_31=0;
-double x_dot_32=0;
-double y_31=0;
+//Filter Z 
+double X_z_1=0;
+double X_z_2=0;
+double X_z_1_dot=0;
+double X_z_2_dot=0;
+double Y_z=0;
 
 double vibration1=0;
 double vibration2=0;
@@ -1168,7 +1182,8 @@ void rpyT_ctrl() {
 	
 	e_r = r_d - imu_rpy.x;
 	e_p = p_d - imu_rpy.y;
-	e_y = y_d - imu_rpy.z;
+	//e_y = y_d - imu_rpy.z;
+	e_y = T_y_r - imu_rpy.z;
 
 	
 	e_r_i += e_r * delta_t.count();
@@ -1179,8 +1194,8 @@ void rpyT_ctrl() {
 	tau_r_d = Par * e_r + Iar * e_r_i + Dar * (-imu_ang_vel.x);//- (double)0.48; //Pa -> Par
 	tau_p_d = Par * e_p + Iar * e_p_i + Dar * (-imu_ang_vel.y);//+ (double)0.18; //Pa -> Par 
 	tau_y_d = Py * e_y + Dy * (-imu_ang_vel.z);
-	tau_y_d_non_sat=tau_y_d;
-	if(fabs(tau_y_d) > tau_y_limit) tau_y_d = tau_y_d/fabs(tau_y_d)*tau_y_limit;
+	//tau_y_d_non_sat=tau_y_d;
+	//if(fabs(tau_y_d) > tau_y_limit) tau_y_d = tau_y_d/fabs(tau_y_d)*tau_y_limit;
 	
 	if(altitude_mode){
 		desired_lin_vel.z = Z_ddot_d; // But this is desired acceleration
@@ -1203,33 +1218,35 @@ void rpyT_ctrl() {
 	//torque_dob();
 	tautilde_r_d = tau_r_d- dhat_tau_r;//dhat_r;// - dhat_tau_r; 
 	tautilde_p_d = tau_p_d- dhat_tau_p;//dhat_p;// - dhat_tau_p;
-	tautilde_y_d = tau_y_d;//- dhat_tau_y;//dhat_p;// - dhat_tau_p;
+	tautilde_y_d = tau_y_d;//- dhat_tau_y;
+	
 	//u << tau_r_d, tau_p_d, tau_y_d, F_zd;
-	u << tautilde_r_d, tautilde_p_d, tautilde_y_d, F_zd;
+//	u << tautilde_r_d, tautilde_p_d, tautilde_y_d, F_zd;
 	torque_d.x = tau_r_d;
 	torque_d.y = tau_p_d;
 	torque_d.z = tau_y_d;
 	if(admittance_mode)
 	{
 		admittance_controller();
-		F_xd = F_xd - dhat_F_X;
-		F_yd = F_yd - dhat_F_Y;
-		//F_zd = F_zd - dhat_F_Z;
+	//	F_xd = F_xd - dhat_F_X;
+	//	F_yd = F_yd - dhat_F_Y;
+	//	F_zd = F_zd - filtered_force_dhat.z;
+	//tau_y_d = tau_y_d - external_torque.z;
+
 	}
 	/*else{
 		ROS_INFO("OFFFFFFFF");
 	}*/
 	force_d.x = F_xd - dhat_F_X;
 	force_d.y = F_yd- dhat_F_Y;
-	force_d.z = F_zd-dhat_F_Z;
-
+	force_d.z = F_zd - filtered_force_dhat.z;
 	
 //	u << tau_r_d, tau_p_d, tau_y_d, F_zd;
 	//u << tau_r_d, tau_p_d, tau_y_d-tau_y_sin, F_zd;
 	//std::cout << "tau_y_sin : " << tau_y_sin << "    ";	
 	prev_angular_Vel = imu_ang_vel;
-	ud_to_PWMs(tau_r_d, tau_p_d, tau_y_d, Thrust_d); //but not use 22.10.12
-	//ud_to_PWMs(tautilde_r_d, tautilde_p_d, tautilde_y_d, Thrust_d);
+	//ud_to_PWMs(tau_r_d, tau_p_d, tau_y_d, Thrust_d); //but not use 22.10.12
+	ud_to_PWMs(tautilde_r_d, tautilde_p_d, tautilde_y_d, Thrust_d);
 }
 
  
@@ -1237,7 +1254,13 @@ void rpyT_ctrl() {
 void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thrust_des) {	
  	
 	//Co-rotating coaxial
+
 	//Conventional type
+
+	tau_y_d_non_sat=tau_y_des;
+	if(fabs(tau_y_d) > tau_y_limit) tau_y_d = tau_y_d/fabs(tau_y_d)*tau_y_limit;
+	u << tautilde_r_d, tautilde_p_d, tau_y_d, F_zd;
+
 	F_cmd = invCM*u;
 	F1 = F_cmd(0);
 	F2 = F_cmd(1);
@@ -1761,14 +1784,14 @@ void disturbance_Observer(){
     tautilde_y_d = tau_y_d;
 	//--------------------------------------------------------------------------------------
 }
-
+/*
 void sine_wave_vibration(){
 	vibration1 = Amp_Z*sin(pass_freq1*time_count);
 	vibration2 = Amp_XY*sin(pass_freq2*time_count);
 	sine_wave.x = vibration1;
 	sine_wave.y = vibration2;
 	time_count += delta_t.count();
-}
+}*/
 
 void get_Rotation_matrix(){
 	Rotz << cos(imu_rpy.z), -sin(imu_rpy.z),   0,
@@ -1818,35 +1841,56 @@ void admittance_controller(){
 	if(fabs(adaptive_external_force.y)<external_force_deadzone) adaptive_external_force.y=0;	
 	if(fabs(adaptive_external_force.z)<external_force_deadzone) adaptive_external_force.z=0;*/	
 	get_Rotation_matrix();
-
-	if(fabs(force_d.x)<external_force_deadzone) dhat_F_X=0;
-	if(fabs(force_d.y)<external_force_deadzone) dhat_F_Y=0;	
-	if(fabs(force_d.z)<external_force_deadzone) dhat_F_Z=0;	
+	force_bandpass_filter();
+	if(fabs(force_dhat.x)<external_force_deadzone) dhat_F_X=0;
+	if(fabs(force_dhat.y)<external_force_deadzone) dhat_F_Y=0;	
+	if(fabs(force_dhat.z)<external_force_deadzone) dhat_F_Z=0;	
+	if(fabs(torque_dhat.z)<external_torque_deadzone) dhat_tau_y=0;	
+	
 	external_force.x = dhat_F_X;
 	external_force.y = dhat_F_Y;
 	external_force.z = dhat_F_Z;
-
+	external_torque.z = dhat_tau_y;
+//------------------filtered_force-------------------------------//
+	/*if(fabs(force_d.x)<external_force_deadzone) filtered_force_dhat.x=0;
+	if(fabs(force_d.y)<external_force_deadzone) filtered_force_dhat.y=0;	
+	if(fabs(force_d.z)<external_force_deadzone) filtered_force_dhat.z=0;	
+	external_force.x = filtered_force_dhat.x;
+	external_force.y = filtered_force_dhat.y;
+	external_force.z = filtered_force_dhat.z;*/
+//--------------------------------------------------------------//	
 	Eigen::Vector3d Fe;
+//	Eigen::Vector3d Te;
 	Eigen::Vector3d Fe_for_rotM;
+//	Eigen::Vector3d Te_for_rotM;
 
 	Fe_for_rotM << external_force.x, external_force.y, external_force.z; 
-	Fe =  Rotz*Roty*Rotz*Fe_for_rotM;
+//	Te_for_rotM << external_torque.x, external_torque.y, external_torque.z; 
+	Fe =  Rotz*Roty*Rotx*Fe_for_rotM;
+//	Te =  Rotz*Roty*Rotz*Te_for_rotM;
 	
-	X_e_x1_dot=-D/M*X_e_x1-K/M*X_e_x2+external_force.x;
+	X_e_x1_dot=-D/M*X_e_x1-K/M*X_e_x2+Fe(0);
 	X_e_x2_dot=X_e_x1;
 	X_e_x1+=X_e_x1_dot*delta_t.count();
 	X_e_x2+=X_e_x2_dot*delta_t.count();
 	X_e=-1.0/M*X_e_x2;
 	
-	Y_e_x1_dot=-D/M*Y_e_x1-K/M*X_e_x2+external_force.y;
+	Y_e_x1_dot=-D/M*Y_e_x1-K/M*X_e_x2+Fe(1);
 	Y_e_x2_dot=Y_e_x1;
 	Y_e_x1+=Y_e_x1_dot*delta_t.count();
 	Y_e_x2+=Y_e_x2_dot*delta_t.count();
 	Y_e=-1.0/M*Y_e_x2;
 	
+	T_e_x1_dot=-D_t/M_t*T_e_x1-K_t/M_t*T_e_x2+external_torque.z;
+	T_e_x2_dot=T_e_x1;
+	T_e_x1+=T_e_x1_dot*delta_t.count();
+	T_e_x2+=T_e_x2_dot*delta_t.count();
+	T_e=-1.0/M_t*T_e_x2;
+
 	X_r=X_d-X_e;
 	Y_r=Y_d-Y_e;
 	Z_r=Z_d;
+	T_y_r = y_d - T_e;
 
 	reference_position.x=X_r;
 	reference_position.y=Y_r;
@@ -1899,7 +1943,30 @@ void position_dob(){
 //	reference_position.y=Y_tilde_r;
 //	reference_position.z=Z_tilde_r;
 } */
+void force_bandpass_filter(){
+	force_dob();
+	/*X_x_1_dot = -pass_freq_x/Q_factor*X_x_1 - pow(pass_freq_x,2.0)-X_x_2 + force_dhat.x;
+	X_x_2_dot = X_x_1;
+	X_x_1 += X_x_1_dot * delta_t.count();
+        X_x_2 += X_x_2_dot * delta_t.count();
+	Y_x = pass_freq_x/Q_factor*X_x_1;
 
+	X_y_1_dot = -pass_freq_y/Q_factor*X_y_1 - pow(pass_freq_y,2.0)-X_y_2 + force_dhat.y;
+	X_y_2_dot = X_y_1;
+	X_y_1 += X_y_1_dot * delta_t.count();
+        X_y_2 += X_y_2_dot * delta_t.count();
+	Y_y = pass_freq_y/Q_factor*X_y_1;*/
+	
+	X_z_1_dot = -pass_freq_z/Q_factor*X_z_1 - pow(pass_freq_z,2.0)-X_z_2 + force_dhat.z;
+	X_z_2_dot = X_z_1;
+	X_z_1 += X_z_1_dot * delta_t.count();
+        X_z_2 += X_z_2_dot * delta_t.count();
+	Y_z = pass_freq_z/Q_factor*X_z_1;
+
+	/*filtered_force_dhat.x=Y_x;
+	filtered_force_dhat.y=Y_y;*/
+	filtered_force_dhat.z=Y_z;
+	}	
 
 void force_dob(){
 	
@@ -1932,10 +1999,9 @@ void force_dob(){
 	Q_F_Z_y=Q_F_C*Q_F_Z_x;
 
 	dhat_F_Z=(MinvQ_F_Z_y(0)-Q_F_Z_y(0));
-
-	external_force.x=dhat_F_X;
-	external_force.y=dhat_F_Y;
-	external_force.z=dhat_F_Z;	
+	force_dhat.x=dhat_F_X;
+	force_dhat.y=dhat_F_Y;
+	force_dhat.z=dhat_F_Z;	
 }
 
 void torque_dob(){
