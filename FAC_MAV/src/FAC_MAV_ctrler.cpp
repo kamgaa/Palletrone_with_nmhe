@@ -208,6 +208,10 @@ double Y_e_x1=0;
 double Y_e_x2=0;
 double Y_e_x1_dot=0;
 double Y_e_x2_dot=0;
+double Z_e_x1=0;
+double Z_e_x2=0;
+double Z_e_x1_dot=0;
+double Z_e_x2_dot=0;
 
 double T_e_x1=0;
 double T_e_x2=0;
@@ -217,11 +221,14 @@ double T_e_x2_dot=0;
 double M=0.5;
 double D=20.0;
 double K=0;
+double M_z=0.5;
+double D_z=30.0;
+double K_z=0;
 double M_t=0.5;
 double D_t=20.0;
 double K_t=0;
 double external_force_deadzone=4.0; //N
-double external_torque_deadzone=0.3; //N
+double external_torque_deadzone=1.0; //N
 
 //Force estimation lpf
 double Fe_x_x_dot = 0;
@@ -268,8 +275,8 @@ static double XYZ_ddot_limit=2;
 static double alpha_beta_limit=1;
 static double hardware_servo_limit=0.3;
 static double servo_command_limit = 0.3;
-static double tau_y_limit = 0.25; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
-static double tau_y_th_limit = 0.5; //2023.08.17 update
+static double tau_y_limit = 0.5; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
+static double tau_y_th_limit = 1.5; //2023.08.17 update
 double tau_y_th = 0.0; //2023.08.17 update
 
 double x_c_hat=0.0;
@@ -518,8 +525,10 @@ ros::Publisher reference_desired_pos_error;
 ros::Publisher reference_pos;
 ros::Publisher force_dhat_pub;
 ros::Publisher torque_dhat_pub;
+ros::Publisher filtered_force_dhat_pub;
 ros::Publisher mass_pub;
 ros::Publisher non_bias_external_force_pub;
+ros::Publisher hpf_filtered_force_dhat_pub;
 //ros::Publisher tau_yaw_thrust;
 //----------------------------------------------------
 
@@ -582,10 +591,10 @@ double y_c_limit = 0.04;
 double z_c_limit = 0.1;
 
 //Bandpass filter parameter
-double Q_factor=10;
-double pass_freq_x=5.0;
-double pass_freq_y=5.0;
-double pass_freq_z=5.0;
+double Q_factor=0.1;
+double pass_freq_x=3.0;
+double pass_freq_y=3.0;
+double pass_freq_z=3.0;
 
 //Filter X 
 double X_x_1=0;
@@ -608,6 +617,30 @@ double X_z_1_dot=0;
 double X_z_2_dot=0;
 double Y_z=0;
 
+//high pass filter parameter----------------------------
+void force_highpass_filter();
+
+double hpf_freq_x=0.1;
+double hpf_freq_y=0.1;
+double hpf_freq_z=0.1;
+
+//Filter X 
+double hpf_X_x=0;
+double hpf_X_x_dot=0;
+double hpf_Y_x=0;
+
+//Filter Y 
+double hpf_X_y=0;
+double hpf_X_y_dot=0;
+double hpf_Y_y=0;
+
+//Filter Z 
+double hpf_X_z=0;
+double hpf_X_z_dot=0;
+double hpf_Y_z=0;
+
+geometry_msgs::Vector3 hpf_filtered_force_dhat;
+//----------------------------------------------------
 double vibration1=0;
 double vibration2=0;
 double time_count=0;
@@ -712,6 +745,21 @@ Eigen::MatrixXd MinvQ_T_Z_y(1,1);
 Eigen::MatrixXd Q_T_Z_x(2,1);
 Eigen::MatrixXd Q_T_Z_x_dot(2,1);
 Eigen::MatrixXd Q_T_Z_y(1,1);
+//-----------------------------------------------------
+//External force with handle---------------------------
+double F_ez_handle=0.0;
+double handle_r=0.554; // (m)
+std_msgs::Float32 external_force_z_handle;
+ros::Publisher external_force_z_handle_pub;
+//-----------------------------------------------------
+//CoM signal processing--------------------------------
+double CoM_fc=1.0;
+double x_c_x_dot=0.0;
+double x_c_x=0.0;
+double x_c_y=0.0;
+double y_c_x_dot=0.0;
+double y_c_x=0.0;
+double y_c_y=0.0;
 //-----------------------------------------------------
 int main(int argc, char **argv){
 	
@@ -871,6 +919,9 @@ int main(int argc, char **argv){
 	non_bias_external_force_pub = nh.advertise<geometry_msgs::Vector3>("non_bias_external_force",1);
 	force_dhat_pub = nh.advertise<geometry_msgs::Vector3>("force_dhat",1);	
 	torque_dhat_pub = nh.advertise<geometry_msgs::Vector3>("torque_dhat",1);	
+	filtered_force_dhat_pub = nh.advertise<geometry_msgs::Vector3>("filtered_force_dhat",1);	
+	hpf_filtered_force_dhat_pub = nh.advertise<geometry_msgs::Vector3>("hpf_filtered_force_dhat",1);
+	external_force_z_handle_pub = nh.advertise<std_msgs::Float32>("external_force_z_handle",1);	
 	//tau_yaw_thrust = nh.advertise<geometry_msgs::Vector3>("pos_r",100);
 
     	ros::Subscriber dynamixel_state = nh.subscribe("joint_states",100,jointstateCallback,ros::TransportHints().tcpNoDelay());
@@ -962,9 +1013,9 @@ void publisherSet(){
 	Force.data[1] = F2;
 	Force.data[2] = F3;
 	Force.data[3] = F4;
-	CoM.x = x_c_hat;
-	CoM.y = y_c_hat;
-	CoM.z = z_c_hat;
+//	CoM.x = x_c_hat;
+//	CoM.y = y_c_hat;
+//	CoM.z = z_c_hat;
 	PWMs.publish(PWMs_cmd);// PWMs_d value
 	euler.publish(imu_rpy);//rpy_act value
 	desired_angle.publish(angle_d);//rpy_d value
@@ -995,6 +1046,9 @@ void publisherSet(){
 	non_bias_external_force_pub.publish(non_bias_external_force);
 	force_dhat_pub.publish(force_dhat);
 	torque_dhat_pub.publish(torque_dhat);
+	filtered_force_dhat_pub.publish(filtered_force_dhat);
+	hpf_filtered_force_dhat_pub.publish(hpf_filtered_force_dhat);
+	external_force_z_handle_pub.publish(external_force_z_handle);
 
 }
 
@@ -1067,7 +1121,7 @@ void rpyT_ctrl() {
 	x_ay+=x_ay_dot*delta_t.count();
 	lin_acl.y=accel_cutoff_freq*x_ay;
 
-	e_Z = Z_d - pos.z;
+	e_Z = Z_r - pos.z;
 	e_Z_i += e_Z * delta_t.count();	
 	if (fabs(e_Z_i) > z_integ_limit) e_Z_i = (e_Z_i / fabs(e_Z_i)) * z_integ_limit;
 
@@ -1081,7 +1135,9 @@ void rpyT_ctrl() {
 			//ROS_INFO("Manual Thrust!!");
 	}
 
-		force_dob();
+	force_dob();
+	force_bandpass_filter();
+	force_highpass_filter();
 	/*if(DOB_mode){
 
 //		disturbance_Observer();
@@ -1208,6 +1264,7 @@ void rpyT_ctrl() {
 		//ROS_INFO("Manual Thrust!!");
 	}
 
+
 	if(F_zd >= -0.5*mass*g) F_zd = -0.5*mass*g;
 	if(F_zd <= -2.0*mass*g) F_zd = -2.0*mass*g; 
 	
@@ -1232,11 +1289,29 @@ void rpyT_ctrl() {
 	//	F_yd = F_yd - dhat_F_Y;
 	//	F_zd = F_zd - filtered_force_dhat.z;
 	//tau_y_d = tau_y_d - external_torque.z;
-
+		x_c_x=0;
+		y_c_x=0;
+		x_c_hat=CoM.x;
+		y_c_hat=CoM.y;
 	}
-	/*else{
-		ROS_INFO("OFFFFFFFF");
-	}*/
+	else{
+		x_c_x_dot=-CoM_fc*x_c_x+dhat_tau_p/F_zd;
+		x_c_x+=x_c_x_dot*delta_t.count();
+		x_c_y=CoM_fc*x_c_x;
+
+		y_c_x_dot=-CoM_fc*y_c_x-dhat_tau_r/F_zd;
+		y_c_x+=y_c_x_dot*delta_t.count();
+		y_c_y=CoM_fc*y_c_x;
+
+		CoM.x=x_c_hat+x_c_y;
+		CoM.y=y_c_hat+y_c_y;
+	}
+	
+	X_r=X_d-X_e;
+	Y_r=Y_d-Y_e;
+	Z_r=Z_d-Z_e;
+	T_y_r = y_d - T_e;
+
 	force_d.x = F_xd - dhat_F_X;
 	force_d.y = F_yd- dhat_F_Y;
 	force_d.z = F_zd - filtered_force_dhat.z;
@@ -1257,7 +1332,7 @@ void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thr
 
 	//Conventional type
 
-	tau_y_d_non_sat=tau_y_des;
+	tau_y_d_non_sat=tau_y_d;
 	if(fabs(tau_y_d) > tau_y_limit) tau_y_d = tau_y_d/fabs(tau_y_d)*tau_y_limit;
 	u << tautilde_r_d, tautilde_p_d, tau_y_d, F_zd;
 
@@ -1268,10 +1343,10 @@ void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thr
 	F4 = F_cmd(3);
 
 	//tau_yaw_sine_desired part---//
-	if((tau_y_d-tau_y_limit)==0)
+	if(fabs(tau_y_d_non_sat)>tau_y_limit)
 	{
-	tau_y_th = tau_y_d_non_sat-tau_y_d;
-	if(fabs(tau_y_th) > tau_y_th_limit) tau_y_th = (tau_y_th/fabs(tau_y_th))*tau_y_th_limit;//2023.08.17 update
+		tau_y_th = tau_y_d_non_sat-tau_y_d;
+		if(fabs(tau_y_th) > tau_y_th_limit) tau_y_th = (tau_y_th/fabs(tau_y_th))*tau_y_th_limit;//2023.08.17 update
 	}
 
 //	ROS_INFO("%lf ",tau_y_th);
@@ -1806,59 +1881,26 @@ void get_Rotation_matrix(){
                   0, cos(imu_rpy.x), -sin(imu_rpy.x),
                   0, sin(imu_rpy.x),  cos(imu_rpy.x);		  
 }
-/*void external_force_estimation(){ 
-   //----Estimate the external force in external_wrench_nmhe_node 2023.09.09----
-	get_Rotation_matrix();
-		
-	x_ax_dot=-accel_cutoff_freq*x_ax+imu_lin_acc.x;
-	x_ax+=x_ax_dot*delta_t.count();
-	x_ay_dot=-accel_cutoff_freq*x_ay+imu_lin_acc.y;
-	x_ay+=x_ay_dot*delta_t.count();
-	x_az_dot=-accel_cutoff_freq*x_az+imu_lin_acc.z;
-	x_az+=x_az_dot*delta_t.count();
-	lin_acl.x=accel_cutoff_freq*x_ax;
-	lin_acl.y=accel_cutoff_freq*x_ay;
-	lin_acl.z=accel_cutoff_freq*x_az;
-
-	double Fx=1.0/4.0*mass*g*(sin(theta1)+sin(theta2)-sin(theta3)-sin(theta4))/r2;
-	double Fy=1.0/4.0*mass*g*(sin(theta1)-sin(theta2)-sin(theta3)+sin(theta4))/r2;
-	double Fz=-mass*g;
-
-	double body_x_ddot_error=lin_acl.x-Fx/mass;
-	double body_y_ddot_error=lin_acl.y-Fy/mass;
-	double body_z_ddot_error=lin_acl.z-Fz/mass;
-
-	Eigen::Vector3d Fe;
-	Eigen::Vector3d body_accel_error;
-
-	if(fabs(external_force.x)<external_force_deadzone) external_force.x=0;
-	if(fabs(external_force.y)<external_force_deadzone) external_force.y=0;
-	if(fabs(external_force.z)<external_force_deadzone) external_force.z=0;
-}*/
 
 void admittance_controller(){
 	/*if(fabs(adaptive_external_force.x)<external_force_deadzone) adaptive_external_force.x=0;
 	if(fabs(adaptive_external_force.y)<external_force_deadzone) adaptive_external_force.y=0;	
 	if(fabs(adaptive_external_force.z)<external_force_deadzone) adaptive_external_force.z=0;*/	
 	get_Rotation_matrix();
-	force_bandpass_filter();
+//	double filtered_dhat_F_x = filtered_force_dhat.x;
+//	double filtered_dhat_F_y = filtered_force_dhat.y;
+	double dhat_F_z_handle = external_force_z_handle.data;
+//	force_bandpass_filter();
 	if(fabs(force_dhat.x)<external_force_deadzone) dhat_F_X=0;
 	if(fabs(force_dhat.y)<external_force_deadzone) dhat_F_Y=0;	
-	if(fabs(force_dhat.z)<external_force_deadzone) dhat_F_Z=0;	
+	if(fabs(external_force_z_handle.data)<5.0) dhat_F_z_handle=0;	// deadzone z direction
 	if(fabs(torque_dhat.z)<external_torque_deadzone) dhat_tau_y=0;	
 	
 	external_force.x = dhat_F_X;
 	external_force.y = dhat_F_Y;
-	external_force.z = dhat_F_Z;
+	external_force.z = dhat_F_z_handle;
 	external_torque.z = dhat_tau_y;
-//------------------filtered_force-------------------------------//
-	/*if(fabs(force_d.x)<external_force_deadzone) filtered_force_dhat.x=0;
-	if(fabs(force_d.y)<external_force_deadzone) filtered_force_dhat.y=0;	
-	if(fabs(force_d.z)<external_force_deadzone) filtered_force_dhat.z=0;	
-	external_force.x = filtered_force_dhat.x;
-	external_force.y = filtered_force_dhat.y;
-	external_force.z = filtered_force_dhat.z;*/
-//--------------------------------------------------------------//	
+
 	Eigen::Vector3d Fe;
 //	Eigen::Vector3d Te;
 	Eigen::Vector3d Fe_for_rotM;
@@ -1881,20 +1923,22 @@ void admittance_controller(){
 	Y_e_x2+=Y_e_x2_dot*delta_t.count();
 	Y_e=-1.0/M*Y_e_x2;
 	
+	Z_e_x1_dot=-D_z/M_z*Z_e_x1-K_z/M_z*Z_e_x2+Fe(2);
+	Z_e_x2_dot=Z_e_x1;
+	Z_e_x1+=Z_e_x1_dot*delta_t.count();
+	Z_e_x2+=Z_e_x2_dot*delta_t.count();
+	Z_e=-1.0/M_z*Z_e_x2;
+
 	T_e_x1_dot=-D_t/M_t*T_e_x1-K_t/M_t*T_e_x2+external_torque.z;
 	T_e_x2_dot=T_e_x1;
 	T_e_x1+=T_e_x1_dot*delta_t.count();
 	T_e_x2+=T_e_x2_dot*delta_t.count();
 	T_e=-1.0/M_t*T_e_x2;
 
-	X_r=X_d-X_e;
-	Y_r=Y_d-Y_e;
-	Z_r=Z_d;
-	T_y_r = y_d - T_e;
 
 	reference_position.x=X_r;
 	reference_position.y=Y_r;
-	reference_position.z=Z_d;	
+	reference_position.z=Z_r;	
 	
 }
 /*
@@ -1944,29 +1988,48 @@ void position_dob(){
 //	reference_position.z=Z_tilde_r;
 } */
 void force_bandpass_filter(){
-	force_dob();
-	/*X_x_1_dot = -pass_freq_x/Q_factor*X_x_1 - pow(pass_freq_x,2.0)-X_x_2 + force_dhat.x;
+//	force_dob(); //?????
+	X_x_1_dot = -pass_freq_x/Q_factor*X_x_1 - pow(pass_freq_x,2.0)*X_x_2 + force_dhat.x;
 	X_x_2_dot = X_x_1;
 	X_x_1 += X_x_1_dot * delta_t.count();
         X_x_2 += X_x_2_dot * delta_t.count();
 	Y_x = pass_freq_x/Q_factor*X_x_1;
 
-	X_y_1_dot = -pass_freq_y/Q_factor*X_y_1 - pow(pass_freq_y,2.0)-X_y_2 + force_dhat.y;
+	X_y_1_dot = -pass_freq_y/Q_factor*X_y_1 - pow(pass_freq_y,2.0)*X_y_2 + force_dhat.y;
 	X_y_2_dot = X_y_1;
 	X_y_1 += X_y_1_dot * delta_t.count();
         X_y_2 += X_y_2_dot * delta_t.count();
-	Y_y = pass_freq_y/Q_factor*X_y_1;*/
+	Y_y = pass_freq_y/Q_factor*X_y_1;
+
 	
-	X_z_1_dot = -pass_freq_z/Q_factor*X_z_1 - pow(pass_freq_z,2.0)-X_z_2 + force_dhat.z;
+	X_z_1_dot = -pass_freq_z/Q_factor*X_z_1 - pow(pass_freq_z,2.0)*X_z_2 + force_dhat.z;
 	X_z_2_dot = X_z_1;
 	X_z_1 += X_z_1_dot * delta_t.count();
         X_z_2 += X_z_2_dot * delta_t.count();
 	Y_z = pass_freq_z/Q_factor*X_z_1;
 
-	/*filtered_force_dhat.x=Y_x;
-	filtered_force_dhat.y=Y_y;*/
+	filtered_force_dhat.x=Y_x;
+	filtered_force_dhat.y=Y_y;
 	filtered_force_dhat.z=Y_z;
-	}	
+}
+
+void force_highpass_filter(){
+	hpf_X_x_dot = -hpf_freq_x*hpf_X_x+force_dhat.x;
+	hpf_X_x += hpf_X_x_dot*delta_t.count();
+	hpf_Y_x = -hpf_freq_x*hpf_X_x+force_dhat.x;
+
+	hpf_X_y_dot = -hpf_freq_y*hpf_X_y+force_dhat.y;
+	hpf_X_y += hpf_X_y_dot*delta_t.count();
+	hpf_Y_y = -hpf_freq_y*hpf_X_y+force_dhat.y;
+
+	hpf_X_z_dot = -hpf_freq_z*hpf_X_z+force_dhat.z;
+	hpf_X_z += hpf_X_z_dot*delta_t.count();
+	hpf_Y_z = -hpf_freq_z*hpf_X_z+force_dhat.z;
+
+	hpf_filtered_force_dhat.x=hpf_Y_x;
+	hpf_filtered_force_dhat.y=hpf_Y_y;
+	hpf_filtered_force_dhat.z=hpf_Y_z;
+}
 
 void force_dob(){
 	
@@ -2038,6 +2101,8 @@ void torque_dob(){
 	torque_dhat.x=dhat_tau_r;
 	torque_dhat.y=dhat_tau_p;
 	torque_dhat.z=dhat_tau_y;
+	
+	external_force_z_handle.data=dhat_tau_p/handle_r;
 	
 }
 

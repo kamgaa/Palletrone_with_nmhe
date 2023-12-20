@@ -55,6 +55,8 @@ geometry_msgs::Vector3 adaptive_external_force;
 geometry_msgs::Vector3 adaptive_external_torque;
 //geometry_msgs::Vector3 MoI;
 geometry_msgs::Vector3 force_dhat;
+geometry_msgs::Vector3 filtered_force_dhat;
+geometry_msgs::Vector3 hpf_filtered_force_dhat;
 geometry_msgs::Vector3 torque_dhat;
 geometry_msgs::Vector3 imu_lin_acc;
 
@@ -74,7 +76,7 @@ double desired_theta4=0.0;
 double mhe_delta_t=0.0;
 double mass=7.4;
 double adaptive_mhe_delta_t=0.0;
-
+double external_force_z_handle=0.0;
 
 void pos_callback(const geometry_msgs::Vector3& msg);
 void desired_pos_callback(const geometry_msgs::Vector3& msg);
@@ -92,8 +94,9 @@ void desired_force_callback(const geometry_msgs::Vector3& msg);
 void desired_torque_callback(const geometry_msgs::Vector3& msg);
 void center_of_mass_callback(const geometry_msgs::Vector3& msg);
 void bias_gradient_callback(const geometry_msgs::Vector3& msg);
-void filtered_bias_gradient_callback(const geometry_msgs::Vector3& msg);
+//void filtered_bias_gradient_callback(const geometry_msgs::Vector3& msg);
 void sbus_callback(const std_msgs::Int16MultiArray::ConstPtr& msg);
+void angular_velocity_callback(const geometry_msgs::Vector3& msg);
 void angular_velocity_callback(const geometry_msgs::Vector3& msg);
 void attitude_dob_disturbance_callback(const geometry_msgs::Vector3& msg);
 void external_force_callback(const geometry_msgs::Vector3& msg);
@@ -109,7 +112,10 @@ void adaptive_mhe_delta_t_callback(const std_msgs::Float32& msg);
 //void MoI_callback(const geometry_msgs::Vector3& msg);
 void force_dhat_callback(const geometry_msgs::Vector3& msg);
 void torque_dhat_callback(const geometry_msgs::Vector3& msg);
+void filtered_force_dhat_callback(const geometry_msgs::Vector3& msg);
+void hpf_filtered_force_dhat_callback(const geometry_msgs::Vector3& msg);
 void imu_lin_acc_callback(const geometry_msgs::Vector3& msg);
+void handle_callback(const std_msgs::Float32& msg);
 void publisherSet();
 
 
@@ -138,18 +144,19 @@ int main(int argc, char **argv)
 	ros::Subscriber desired_linear_velocity_log=nh.subscribe("/lin_vel_d",1,desired_linear_velocity_callback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber Center_of_Mass_log=nh.subscribe("/Center_of_Mass",1,center_of_mass_callback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber bias_gradient_log=nh.subscribe("/bias_gradient",1,bias_gradient_callback,ros::TransportHints().tcpNoDelay());
-	ros::Subscriber filtered_bias_gradient_log=nh.subscribe("/filtered_bias_gradient",1,filtered_bias_gradient_callback,ros::TransportHints().tcpNoDelay());
+//	ros::Subscriber filtered_bias_gradient_log=nh.subscribe("/filtered_bias_gradient",1,filtered_bias_gradient_callback,ros::TransportHints().tcpNoDelay());
 	ros::Subscriber angular_velocity_log=nh.subscribe("/angular_velocity",1,angular_velocity_callback,ros::TransportHints().tcpNoDelay());
-	ros::Subscriber attitude_dob_disturbance_log=nh.subscribe("/att_dhat",1,attitude_dob_disturbance_callback,ros::TransportHints().tcpNoDelay());
-	ros::Subscriber external_force_log=nh.subscribe("/external_force",1,external_force_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber external_torque_log=nh.subscribe("/external_torque",1,external_torque_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber mhe_delta_t_log=nh.subscribe("/mhe_delta_t",1,mhe_delta_t_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber reference_position_log=nh.subscribe("/pos_r",1,reference_position_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber calculated_force_log=nh.subscribe("/calculated_force",1,calculated_force_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber non_bias_external_force_log=nh.subscribe("/non_bias_external_force",1,non_bias_external_force_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber force_dhat_sub=nh.subscribe("/force_dhat",1,force_dhat_callback, ros::TransportHints().tcpNoDelay());
+	ros::Subscriber filtered_force_dhat_sub=nh.subscribe("/filtered_force_dhat",1,filtered_force_dhat_callback, ros::TransportHints().tcpNoDelay());
+	ros::Subscriber hpf_filtered_force_dhat_sub=nh.subscribe("/hpf_filtered_force_dhat",1,hpf_filtered_force_dhat_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber torque_dhat_sub=nh.subscribe("/torque_dhat",1,torque_dhat_callback, ros::TransportHints().tcpNoDelay());
 	ros::Subscriber imu_lin_acc_sub=nh.subscribe("/imu_lin_acl",1,imu_lin_acc_callback, ros::TransportHints().tcpNoDelay());
+	ros::Subscriber external_force_z_handle_sub=nh.subscribe("/external_force_z_handle",1,handle_callback, ros::TransportHints().tcpNoDelay());
 
 
 	data_log_publisher=nh.advertise<std_msgs::Float64MultiArray>("data_log",10);
@@ -160,7 +167,7 @@ int main(int argc, char **argv)
 
 void publisherSet()
 {
-	data_log.data.resize(96);
+	data_log.data.resize(103);
 
 	data_log.data[0]=attitude.x;
 	data_log.data[1]=attitude.y;
@@ -230,6 +237,9 @@ void publisherSet()
 	data_log.data[65]=angular_velocity.y;
 	data_log.data[66]=angular_velocity.z;
 	data_log.data[67]=attitude_dob_disturbance.x;
+	data_log.data[65]=angular_velocity.y;
+	data_log.data[66]=angular_velocity.z;
+	data_log.data[67]=attitude_dob_disturbance.x;
 	data_log.data[68]=attitude_dob_disturbance.y;
 	data_log.data[69]=attitude_dob_disturbance.z;
 	data_log.data[70]=external_force.x;
@@ -258,6 +268,13 @@ void publisherSet()
 	data_log.data[93]=imu_lin_acc.x;	
 	data_log.data[94]=imu_lin_acc.y;	
 	data_log.data[95]=imu_lin_acc.z;	
+	data_log.data[96]=filtered_force_dhat.x;
+	data_log.data[97]=filtered_force_dhat.y;
+	data_log.data[98]=filtered_force_dhat.z;
+	data_log.data[99]=hpf_filtered_force_dhat.x;
+	data_log.data[100]=hpf_filtered_force_dhat.y;
+	data_log.data[101]=hpf_filtered_force_dhat.z;
+	data_log.data[102]=external_force_z_handle;
 	data_log_publisher.publish(data_log);
 }
 
@@ -356,12 +373,6 @@ void bias_gradient_callback(const geometry_msgs::Vector3& msg){
 	bias_gradient.z=msg.z;
 }
 
-void filtered_bias_gradient_callback(const geometry_msgs::Vector3& msg){
-	filtered_bias_gradient.x=msg.x;
-	filtered_bias_gradient.y=msg.y;
-	filtered_bias_gradient.z=msg.z;
-}
-
 void sbus_callback(const std_msgs::Int16MultiArray::ConstPtr& msg){
 	for(int i=0;i<10;i++){
 		SBUS[i]=msg->data[i];	
@@ -432,4 +443,20 @@ void torque_dhat_callback(const geometry_msgs::Vector3& msg){
 
 void imu_lin_acc_callback(const geometry_msgs::Vector3& msg){
 	imu_lin_acc=msg;
+}
+
+void filtered_force_dhat_callback(const geometry_msgs::Vector3& msg){
+	filtered_force_dhat.x=msg.x;
+	filtered_force_dhat.y=msg.y;
+	filtered_force_dhat.z=msg.z;
+}
+
+void hpf_filtered_force_dhat_callback(const geometry_msgs::Vector3& msg){
+	hpf_filtered_force_dhat.x=msg.x;
+	hpf_filtered_force_dhat.y=msg.y;
+	hpf_filtered_force_dhat.z=msg.z;
+}
+
+void handle_callback(const std_msgs::Float32& msg){
+	external_force_z_handle=msg.data;
 }
