@@ -273,8 +273,8 @@ static double XY_limit = 1.0;
 static double XYZ_dot_limit=1;
 static double XYZ_ddot_limit=2;
 static double alpha_beta_limit=1;
-static double hardware_servo_limit=0.3;
-static double servo_command_limit = 0.3;
+static double hardware_servo_limit=0.25;
+static double servo_command_limit = 0.25;
 static double tau_y_limit = 0.5; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
 static double tau_y_th_limit = 1.5; //2023.08.17 update
 double tau_y_th = 0.0; //2023.08.17 update
@@ -462,7 +462,7 @@ void get_Rotation_matrix();
 void Rotation_matrix();
 void external_force_estimation();
 void admittance_controller();
-
+void Servo_angle_LPF();
 double position_dob_fc=0.1;
 double position_dob_m=8.0;
 
@@ -761,6 +761,26 @@ double y_c_x_dot=0.0;
 double y_c_x=0.0;
 double y_c_y=0.0;
 //-----------------------------------------------------
+//Servo Angle LPF
+double x_th1_dot = 0;
+double x_th2_dot = 0;
+double x_th3_dot = 0;
+double x_th4_dot = 0;
+
+double x_th1 = 0;
+double x_th2 = 0;
+double x_th3 = 0;
+double x_th4 = 0;
+double th_cut_off_freq = 10.0;
+
+Eigen::VectorXd servo_LPF(4);
+Eigen::VectorXd servo_command(4);
+double servo_command1=0.0;
+double servo_command2=0.0;
+double servo_command3=0.0;
+double servo_command4=0.0;
+//-----------------------------------------------------
+
 int main(int argc, char **argv){
 	
     	ros::init(argc, argv,"t3_mav_controller");
@@ -1020,7 +1040,7 @@ void publisherSet(){
 	euler.publish(imu_rpy);//rpy_act value
 	desired_angle.publish(angle_d);//rpy_d value
 	Forces.publish(Force);// force conclusion
-	goal_dynamixel_position_.publish(servo_msg_create(theta1_command,theta2_command, theta3_command, theta4_command)); // desired theta
+	goal_dynamixel_position_.publish(servo_msg_create(servo_command1,servo_command2, servo_command3, servo_command4)); // desired theta
 	desired_torque.publish(torque_d); // torque desired
 	linear_velocity.publish(lin_vel); // actual linear velocity 
 	PWM_generator.publish(PWMs_val);
@@ -1324,7 +1344,44 @@ void rpyT_ctrl() {
 	ud_to_PWMs(tautilde_r_d, tautilde_p_d, tautilde_y_d, Thrust_d);
 }
 
+double asine_safety(double command)
+{
+	 double sine_theta_limit = 0.9; //rad | rad2deg :: 85.94
+	 if(fabs(command)>sine_theta_limit)  command= (command/fabs(command))*sine_theta_limit;
+	 return command;
+}
+
+double Forces_safety(double command)
+{
+
+ if(command > 80) command = 80;
+ if(command <= 1) command = 1;
  
+
+ return command;
+}
+
+void Servo_angle_LPF()
+{
+  x_th1_dot=-th_cut_off_freq*x_th1+theta1_command;
+	x_th1+=x_th1_dot*delta_t.count();
+	//ROS_INFO("%lf ",x_th1_dot);
+	//ROS_WARN("%lf " ,x_th1);
+
+  x_th2_dot=-th_cut_off_freq*x_th2+theta2_command;
+	x_th2+=x_th2_dot*delta_t.count();
+
+  x_th3_dot=-th_cut_off_freq*x_th3+theta3_command;
+	x_th3+=x_th3_dot*delta_t.count();
+
+  x_th4_dot=-th_cut_off_freq*x_th4+theta4_command;
+	x_th4+=x_th4_dot*delta_t.count();
+
+  servo_LPF(0)=th_cut_off_freq*x_th1;
+  servo_LPF(1)=th_cut_off_freq*x_th2;
+  servo_LPF(2)=th_cut_off_freq*x_th3;
+  servo_LPF(3)=th_cut_off_freq*x_th4;
+}
 
 void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thrust_des) {	
  	
@@ -1337,10 +1394,10 @@ void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thr
 	u << tautilde_r_d, tautilde_p_d, tau_y_d, F_zd;
 
 	F_cmd = invCM*u;
-	F1 = F_cmd(0);
-	F2 = F_cmd(1);
-	F3 = F_cmd(2);
-	F4 = F_cmd(3);
+	F1 = Forces_safety(F_cmd(0));
+	F2 = Forces_safety(F_cmd(1));
+	F3 = Forces_safety(F_cmd(2));
+	F4 = Forces_safety(F_cmd(3));
 
 	//tau_yaw_sine_desired part---//
 	if(fabs(tau_y_d_non_sat)>tau_y_limit)
@@ -1368,14 +1425,26 @@ void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thr
 	}
 	//Tilting type
 	else {
-		theta1_command = asin(sine_theta_command(0));
-		theta2_command = asin(sine_theta_command(1));
-		theta3_command = asin(sine_theta_command(2));
-		theta4_command = asin(sine_theta_command(3));
- 		if(fabs(theta1_command)>hardware_servo_limit) theta1_command = (theta1_command/fabs(theta1_command))*hardware_servo_limit;
-		if(fabs(theta2_command)>hardware_servo_limit) theta2_command = (theta2_command/fabs(theta2_command))*hardware_servo_limit;
-		if(fabs(theta3_command)>hardware_servo_limit) theta3_command = (theta3_command/fabs(theta3_command))*hardware_servo_limit;
-		if(fabs(theta4_command)>hardware_servo_limit) theta4_command = (theta4_command/fabs(theta4_command))*hardware_servo_limit;
+		//Servo_angle_LPF();
+		theta1_command = asin(asine_safety(sine_theta_command(0)));
+		theta2_command = asin(asine_safety(sine_theta_command(1)));
+  		theta3_command = asin(asine_safety(sine_theta_command(2)));
+  		theta4_command = asin(asine_safety(sine_theta_command(3)));
+
+		/*Servo_angle_LPF();
+  		servo_command1=servo_LPF(0);
+  		servo_command2=servo_LPF(1);
+  		servo_command3=servo_LPF(2);
+		servo_command4=servo_LPF(3);*/
+		servo_command1=theta1_command;
+		servo_command2=theta2_command;
+		servo_command3=theta3_command;
+		servo_command4=theta4_command;
+
+ 		if(fabs(servo_command1)>hardware_servo_limit) servo_command1 = (servo_command1/fabs(servo_command1))*hardware_servo_limit;
+ 		if(fabs(servo_command2)>hardware_servo_limit) servo_command2 = (servo_command2/fabs(servo_command2))*hardware_servo_limit;
+ 		if(fabs(servo_command3)>hardware_servo_limit) servo_command3 = (servo_command3/fabs(servo_command3))*hardware_servo_limit;
+ 		if(fabs(servo_command4)>hardware_servo_limit) servo_command4 = (servo_command4/fabs(servo_command4))*hardware_servo_limit;
 		//2023.08.03 udpate
 		//ROS_INFO("%lf %lf %lf %lf",theta1_command, theta2_command, theta3_command, theta4_command);
 	}
@@ -1703,10 +1772,10 @@ void pwm_Arm(){
 	PWMs_cmd.data[2] = 1500;
 	PWMs_cmd.data[3] = 1500;
 	PWMs_val.data.resize(16);
-	PWMs_val.data[0] = pwmMapping(1400.);
-	PWMs_val.data[1] = pwmMapping(1400.);
-	PWMs_val.data[2] = pwmMapping(1400.);
-	PWMs_val.data[3] = pwmMapping(1400.);
+	PWMs_val.data[0] = pwmMapping(1500.);
+	PWMs_val.data[1] = pwmMapping(1500.);
+	PWMs_val.data[2] = pwmMapping(1500.);
+	PWMs_val.data[3] = pwmMapping(1500.);
 	PWMs_val.data[4] = -1;
 	PWMs_val.data[5] = -1;
 	PWMs_val.data[6] = -1;
@@ -2138,4 +2207,3 @@ void mass_update()
 	mass_topic.data=mass+mass_y;
 
 }
-
