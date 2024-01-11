@@ -244,7 +244,7 @@ double Fe_cutoff_freq = 1.0;
 
 static double r_arm = 0.3025;// m // diagonal length between thruster x2
 static double l_servo = 0.035;
-static double mass = 8.0;//	!!!!PLEASE CHECK the position_dob_m!!!!
+static double mass = 8.0;//changed 24.01.10	!!!!PLEASE CHECK the position_dob_m!!!!
 static double r2=sqrt(2);
 
 
@@ -273,10 +273,10 @@ static double XY_limit = 1.0;
 static double XYZ_dot_limit=1;
 static double XYZ_ddot_limit=2;
 static double alpha_beta_limit=1;
-static double hardware_servo_limit=0.25;
-static double servo_command_limit = 0.25;
-static double tau_y_limit = 0.5; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
-static double tau_y_th_limit = 1.5; //2023.08.17 update
+static double hardware_servo_limit=0.3;//0.25->0.3 24.01.11 changed
+static double servo_command_limit = 0.3;
+static double tau_y_limit = 0.1; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
+static double tau_y_th_limit = 1.9; //2023.08.17 update
 double tau_y_th = 0.0; //2023.08.17 update
 
 double x_c_hat=0.0;
@@ -1354,9 +1354,9 @@ double asine_safety(double command)
 double Forces_safety(double command)
 {
 
- if(command > 80) command = 80;
+ /*if(command > 80) command = 80;
  if(command <= 1) command = 1;
- 
+*/ 
 
  return command;
 }
@@ -1404,6 +1404,9 @@ void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thr
 	{
 		tau_y_th = tau_y_d_non_sat-tau_y_d;
 		if(fabs(tau_y_th) > tau_y_th_limit) tau_y_th = (tau_y_th/fabs(tau_y_th))*tau_y_th_limit;//2023.08.17 update
+	}
+	else{
+		tau_y_th=0.0;
 	}
 
 //	ROS_INFO("%lf ",tau_y_th);

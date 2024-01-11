@@ -83,7 +83,7 @@
 	
 	<!--Tilt flight mode-->
 		<!--Tilt Mode attitude_r gains-->
-		<param name="tilt_attitude_r_P_gain"	value="40.0"/> <!-- 10.0 -->	
+		<param name="tilt_attitude_r_P_gain"	value="23.0"/> <!-- 10.0 -->	
 		<param name="tilt_attitude_r_I_gain"	value="0.0"/> <!-- 0.0 -->
 		<param name="tilt_attitude_r_D_gain"	value="20.0"/> <!-- 12.0 -->
 		
@@ -99,9 +99,9 @@
 
 
 		<!--Tilt Mode Altitude gains-->
-		<param name="tilt_altitude_P_gain"	value="23.0"/>
+		<param name="tilt_altitude_P_gain"	value="13.0"/>
 		<param name="tilt_altitude_I_gain"	value="5.0"/>
-		<param name="tilt_altitude_D_gain"	value="8.0"/>
+		<param name="tilt_altitude_D_gain"	value="7.0"/>
 
 		<!--Tilt Mode Velocity gains-->
 		<param name="tilt_velocity_P_gain"	value="0.9"/>	
@@ -110,8 +110,8 @@
 
 		<!--Tilt Mode Position gains-->
 		<param name="tilt_position_P_gain"	value="4.0"/>	
-		<param name="tilt_position_I_gain"	value="0.001"/>	
-		<param name="tilt_position_D_gain"	value="4.0"/>	
+		<param name="tilt_position_I_gain"	value="0.0001"/>	
+		<param name="tilt_position_D_gain"	value="2.0"/>	
 
     	<node name="FAC_MAV_node"  pkg="FAC_MAV" type="FAC_MAV_ctrler"  output="screen"/>
 <!--	<node name="external_wrench_estimator_node" pkg="external_wrench_nmhe" type="external_wrench_estimator" output="screen"/> -->
