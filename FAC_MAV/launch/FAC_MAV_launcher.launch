@@ -83,9 +83,9 @@
 	
 	<!--Tilt flight mode-->
 		<!--Tilt Mode attitude_r gains-->
-		<param name="tilt_attitude_r_P_gain"	value="23.0"/> <!-- 10.0 -->	
+		<param name="tilt_attitude_r_P_gain"	value="25.0"/> <!-- 10.0 -->	
 		<param name="tilt_attitude_r_I_gain"	value="0.0"/> <!-- 0.0 -->
-		<param name="tilt_attitude_r_D_gain"	value="20.0"/> <!-- 12.0 -->
+		<param name="tilt_attitude_r_D_gain"	value="18.0"/> <!-- 12.0 -->
 		
 		<!--Tilt Mode attitude_p gains-->
 		<param name="tilt_attitude_p_P_gain"	value="0.15"/>	
@@ -93,15 +93,15 @@
 		<param name="tilt_attitude_p_D_gain"	value="0.0"/> 
 
 		<!--Tilt Mode attitude_y gains-->
-		<param name="tilt_attitude_y_P_gain"	value="20.0"/>
+		<param name="tilt_attitude_y_P_gain"	value="12.0"/>
 		<!--<param name="tilt_attitude_y_I_gain"	value="0"/>-->
-		<param name="tilt_attitude_y_D_gain"	value="6.0"/>
+		<param name="tilt_attitude_y_D_gain"	value="5.0"/>
 
 
 		<!--Tilt Mode Altitude gains-->
-		<param name="tilt_altitude_P_gain"	value="13.0"/>
+		<param name="tilt_altitude_P_gain"	value="23.0"/>
 		<param name="tilt_altitude_I_gain"	value="5.0"/>
-		<param name="tilt_altitude_D_gain"	value="7.0"/>
+		<param name="tilt_altitude_D_gain"	value="8.0"/>
 
 		<!--Tilt Mode Velocity gains-->
 		<param name="tilt_velocity_P_gain"	value="0.9"/>	
@@ -110,7 +110,7 @@
 
 		<!--Tilt Mode Position gains-->
 		<param name="tilt_position_P_gain"	value="4.0"/>	
-		<param name="tilt_position_I_gain"	value="0.0001"/>	
+		<param name="tilt_position_I_gain"	value="0.001"/>	
 		<param name="tilt_position_D_gain"	value="2.0"/>	
 
     	<node name="FAC_MAV_node"  pkg="FAC_MAV" type="FAC_MAV_ctrler"  output="screen"/>

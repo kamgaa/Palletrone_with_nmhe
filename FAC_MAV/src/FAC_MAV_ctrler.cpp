@@ -58,7 +58,7 @@
 #include "nav_msgs/Odometry.h"
 
 double freq=200;//controller loop frequency
-double pwm_freq=428.0;//pwm signal frequency 
+double pwm_freq=428.0;//pwm signal frequency 428-> 438 
 
 std::chrono::duration<double> delta_t;
 int16_t Sbus[10];
@@ -275,8 +275,8 @@ static double XYZ_ddot_limit=2;
 static double alpha_beta_limit=1;
 static double hardware_servo_limit=0.3;//0.25->0.3 24.01.11 changed
 static double servo_command_limit = 0.3;
-static double tau_y_limit = 0.1; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
-static double tau_y_th_limit = 1.9; //2023.08.17 update
+static double tau_y_limit = 0.25; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
+static double tau_y_th_limit = 2.25; //2023.08.17 update
 double tau_y_th = 0.0; //2023.08.17 update
 
 double x_c_hat=0.0;
@@ -1212,7 +1212,7 @@ void rpyT_ctrl() {
 			
 			X_tilde_ddot_d=X_ddot_d;//-(dhat_F_X/force_dob_m);
 			Y_tilde_ddot_d=Y_ddot_d;//-(dhat_F_Y/force_dob_m);
-			Z_tilde_ddot_d=Z_ddot_d;//-(dhat_F_Z/force_dob_m);
+			Z_tilde_ddot_d=Z_ddot_d;//-(dhat_F_Z/force_dob_m);//changed 24.01.11 19:25
 			r_d = 0.0;
 			p_d = 0.0;
 			F_xd = mass*(X_tilde_ddot_d*cos(imu_rpy.z)*cos(imu_rpy.y)+Y_tilde_ddot_d*sin(imu_rpy.z)*cos(imu_rpy.y)-(Z_tilde_ddot_d)*sin(imu_rpy.y));
@@ -1306,8 +1306,8 @@ void rpyT_ctrl() {
 	{
 		admittance_controller();
 	//	F_xd = F_xd - dhat_F_X;
-	//	F_yd = F_yd - dhat_F_Y;
-	//	F_zd = F_zd - filtered_force_dhat.z;
+//		F_yd = F_yd - dhat_F_Y;
+//		F_zd = F_zd - filtered_force_dhat.z;
 	//tau_y_d = tau_y_d - external_torque.z;
 		x_c_x=0;
 		y_c_x=0;
@@ -1693,7 +1693,7 @@ void adaptive_external_torque_Callback(const geometry_msgs::Vector3& msg){
 }*/
 
 int32_t pwmMapping(double pwm){
-	return (int32_t)(65535.*pwm/(1./pwm_freq*1000000.));
+	return (int32_t)(65535.*pwm/(1./pwm_freq*1000000.));//65535 ->65635
 }
 
 void pwm_Command(double pwm1, double pwm2, double pwm3, double pwm4){
@@ -1770,15 +1770,15 @@ void pwm_Kill(){
 
 void pwm_Arm(){
 	PWMs_cmd.data.resize(4);
-	PWMs_cmd.data[0] = 1500;
-	PWMs_cmd.data[1] = 1500;
-	PWMs_cmd.data[2] = 1500;
-	PWMs_cmd.data[3] = 1500;
+	PWMs_cmd.data[0] = 1750;
+	PWMs_cmd.data[1] = 1750;
+	PWMs_cmd.data[2] = 1750;
+	PWMs_cmd.data[3] = 1750;
 	PWMs_val.data.resize(16);
 	PWMs_val.data[0] = pwmMapping(1500.);
 	PWMs_val.data[1] = pwmMapping(1500.);
 	PWMs_val.data[2] = pwmMapping(1500.);
-	PWMs_val.data[3] = pwmMapping(1500.);
+	PWMs_val.data[3] = pwmMapping(1750.);
 	PWMs_val.data[4] = -1;
 	PWMs_val.data[5] = -1;
 	PWMs_val.data[6] = -1;
