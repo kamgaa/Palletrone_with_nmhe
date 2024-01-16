@@ -148,6 +148,7 @@ double e_Z_dot_i = 0;//Z velocity error integration
 double tau_r_d = 0;//roll  desired torque (N.m)
 double tau_p_d = 0;//pitch desired torque(N.m)
 double tau_y_d = 0;//yaw desired torque (N.m)
+double tau_y_d_for_integ = 0;//yaw desired torque (N.m)
 double tau_y_d_non_sat=0;//yaw deried torque non-saturation (N.m)
 
 double Thrust_d = 0;//altitude desired thrust(N)
@@ -278,6 +279,7 @@ static double servo_command_limit = 0.3;
 static double tau_y_limit = 0.25; // 1.0 -> 1.5 ->3.0 ->1.5 ->1.0 -> 0.5 -> 0.75
 static double tau_y_th_limit = 2.25; //2023.08.17 update
 double tau_y_th = 0.0; //2023.08.17 update
+double tau_y_th_integ = 0.0; //2024.01.16 update
 
 double x_c_hat=0.0;
 double y_c_hat=0.0;
@@ -1390,7 +1392,11 @@ void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thr
 	//Conventional type
 
 	tau_y_d_non_sat=tau_y_d;
-	if(fabs(tau_y_d) > tau_y_limit) tau_y_d = tau_y_d/fabs(tau_y_d)*tau_y_limit;
+	if(fabs(tau_y_d_non_sat) > tau_y_limit)
+	{
+	       	tau_y_d_for_integ = tau_y_d_non_sat/fabs(tau_y_d_non_sat)*tau_y_limit;
+		tau_y_d = tau_y_d_for_integ;
+	}
 	u << tautilde_r_d, tautilde_p_d, tau_y_d, F_zd;
 
 	F_cmd = invCM*u;
@@ -1400,21 +1406,28 @@ void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thr
 	F4 = Forces_safety(F_cmd(3));
 
 	//tau_yaw_sine_desired part---//
-	if(fabs(tau_y_d_non_sat)>tau_y_limit)
+	if((fabs(tau_y_d_for_integ)-tau_y_limit)==0)
 	{
-		tau_y_th = tau_y_d_non_sat-tau_y_d;
+		tau_y_th = tau_y_d_non_sat-tau_y_d_for_integ;
 		if(fabs(tau_y_th) > tau_y_th_limit) tau_y_th = (tau_y_th/fabs(tau_y_th))*tau_y_th_limit;//2023.08.17 update
 	}
-	else{
-		tau_y_th=0.0;
+	tau_y_th_integ +=(1*tau_y_d);
+	if(fabs(tau_y_th_integ)>tau_y_limit)
+	{
+		tau_y_th_integ = (tau_y_th_integ/fabs(tau_y_th_integ))*tau_y_limit;
 	}
+
+	/*else{
+		tau_y_th=0.0;
+	}*/
+
 
 //	ROS_INFO("%lf ",tau_y_th);
 	//----------------------------//
 	//	(r_arm*(sin(theta1)*F1 + sin(theta2)*F2 + sin(theta3)*F3 + sin(theta4)*F4)); //2023.08.03 update
 
 	//double tau_y_cos=-F1*xi*cos(theta1)+F2*xi*cos(theta2)-F3*xi*cos(theta3)+F4*xi*cos(theta4);
-	control_by_theta << F_xd, F_yd, tau_y_th, 0;
+	control_by_theta << F_xd, F_yd, tau_y_th + tau_y_th_integ, 0;
 	//std::cout << "tau_y_cos : " << tau_y_cos << std::endl;	
 	//std::cout << "pinvSA : \n" << pinvSA <<std::endl;
 	setSA();
@@ -1434,15 +1447,15 @@ void ud_to_PWMs(double tau_r_des, double tau_p_des, double tau_y_des, double Thr
   		theta3_command = asin(asine_safety(sine_theta_command(2)));
   		theta4_command = asin(asine_safety(sine_theta_command(3)));
 
-		/*Servo_angle_LPF();
+		Servo_angle_LPF();
   		servo_command1=servo_LPF(0);
   		servo_command2=servo_LPF(1);
   		servo_command3=servo_LPF(2);
-		servo_command4=servo_LPF(3);*/
-		servo_command1=theta1_command;
+		servo_command4=servo_LPF(3);
+		/*servo_command1=theta1_command;
 		servo_command2=theta2_command;
 		servo_command3=theta3_command;
-		servo_command4=theta4_command;
+		servo_command4=theta4_command;*/
 
  		if(fabs(servo_command1)>hardware_servo_limit) servo_command1 = (servo_command1/fabs(servo_command1))*hardware_servo_limit;
  		if(fabs(servo_command2)>hardware_servo_limit) servo_command2 = (servo_command2/fabs(servo_command2))*hardware_servo_limit;
