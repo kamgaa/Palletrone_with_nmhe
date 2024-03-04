@@ -4,8 +4,6 @@
 
 ---
 
-chlthfdms qhdkfk!!
-
 - Paletrone ROS Installation Guide
     
     팔레트론 구동시 필요한 시스템을 정리하였습니다.
@@ -98,7 +96,7 @@ chlthfdms qhdkfk!!
     
     - realsense-viewer 의존성 해결
         
-        ```jsx
+        ```bash
         sudo rm -f /etc/udev/rules.d/99-realsense-libusb.rules
         ```
         
@@ -152,7 +150,6 @@ chlthfdms qhdkfk!!
     
     ---
     
-    ",
     
     — 설치 후 —
     
