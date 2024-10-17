@@ -1,6 +1,6 @@
 ---
 
-#———# created by MRL Lab #———#
+#———# created by MRL  #———#
 
 ---
 
